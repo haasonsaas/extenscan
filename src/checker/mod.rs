@@ -1,8 +1,8 @@
 mod osv;
 mod version;
 
-pub use osv::OsvChecker;
-pub use version::VersionChecker;
+pub use osv::{parse_cvss_score, OsvChecker};
+pub use version::{is_newer, VersionChecker};
 
 use crate::model::{Package, Vulnerability};
 use anyhow::Result;

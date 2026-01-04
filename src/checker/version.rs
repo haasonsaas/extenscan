@@ -138,7 +138,10 @@ impl Default for VersionChecker {
     }
 }
 
-fn is_newer(latest: &str, current: &str) -> bool {
+/// Compares two version strings to determine if `latest` is newer than `current`.
+///
+/// Uses semver parsing when possible, falls back to string comparison.
+pub fn is_newer(latest: &str, current: &str) -> bool {
     // Try semver comparison first
     if let (Ok(latest_ver), Ok(current_ver)) = (
         semver::Version::parse(latest.trim_start_matches('v')),
@@ -154,4 +157,52 @@ fn is_newer(latest: &str, current: &str) -> bool {
     }
 
     latest != current
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_newer_semver_basic() {
+        assert!(is_newer("2.0.0", "1.0.0"));
+        assert!(is_newer("1.1.0", "1.0.0"));
+        assert!(is_newer("1.0.1", "1.0.0"));
+        assert!(!is_newer("1.0.0", "1.0.0"));
+        assert!(!is_newer("1.0.0", "2.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_with_v_prefix() {
+        assert!(is_newer("v2.0.0", "v1.0.0"));
+        assert!(is_newer("v2.0.0", "1.0.0"));
+        assert!(is_newer("2.0.0", "v1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_prerelease() {
+        assert!(is_newer("1.0.0", "1.0.0-beta"));
+        assert!(is_newer("1.0.0-rc.1", "1.0.0-beta.1"));
+        assert!(!is_newer("1.0.0-alpha", "1.0.0"));
+    }
+
+    #[test]
+    fn test_is_newer_unknown_current() {
+        // Unknown current version should never trigger an update
+        assert!(!is_newer("2.0.0", "unknown"));
+        assert!(!is_newer("anything", "unknown"));
+    }
+
+    #[test]
+    fn test_is_newer_non_semver() {
+        // Non-semver versions fall back to string comparison
+        assert!(is_newer("2024.01.15", "2024.01.14"));
+        assert!(!is_newer("same", "same"));
+    }
+
+    #[test]
+    fn test_is_newer_edge_cases() {
+        assert!(is_newer("10.0.0", "9.0.0")); // Numeric, not lexicographic
+        assert!(is_newer("1.10.0", "1.9.0")); // Multi-digit minor version
+    }
 }

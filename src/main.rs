@@ -1,16 +1,29 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use extenscan::{
     cache::Cache,
     checker::{default_checker, default_version_checker, VulnerabilityChecker},
     config::Config,
-    model::{ScanResult, Source},
+    model::{ScanResult, Severity, Source},
     output::{print_result, OutputFormat},
     scanner::{all_scanners, get_scanner, Scanner},
 };
+use futures::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::process::ExitCode;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
+
+/// Exit codes for CI integration
+mod exit_codes {
+    pub const SUCCESS: u8 = 0;
+    pub const CRITICAL_VULN: u8 = 2;
+    pub const HIGH_VULN: u8 = 3;
+    pub const MEDIUM_VULN: u8 = 4;
+    pub const LOW_VULN: u8 = 5;
+    pub const ERROR: u8 = 1;
+}
 
 #[derive(Parser)]
 #[command(name = "extenscan")]
@@ -32,7 +45,7 @@ enum Commands {
         #[arg(short, long)]
         source: Option<String>,
 
-        /// Output format (table, json)
+        /// Output format (table, json, sarif)
         #[arg(short, long)]
         format: Option<String>,
 
@@ -51,6 +64,14 @@ enum Commands {
         /// Clear cache before scanning
         #[arg(long)]
         clear_cache: bool,
+
+        /// Exit with error if vulnerabilities at or above this severity are found
+        #[arg(long, value_enum)]
+        fail_on: Option<FailLevel>,
+
+        /// Disable concurrent scanning (scan sources sequentially)
+        #[arg(long)]
+        no_parallel: bool,
     },
 
     /// List available sources
@@ -71,8 +92,26 @@ enum Commands {
     ClearCache,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum FailLevel {
+    Critical,
+    High,
+    Medium,
+    Low,
+}
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(code) => ExitCode::from(code),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            ExitCode::from(exit_codes::ERROR)
+        }
+    }
+}
+
+async fn run() -> Result<u8> {
     let cli = Cli::parse();
     let config = Config::load().unwrap_or_default();
 
@@ -84,6 +123,8 @@ async fn main() -> Result<()> {
             no_outdated_check,
             output,
             clear_cache,
+            fail_on,
+            no_parallel,
         } => {
             if clear_cache {
                 let cache = Cache::new();
@@ -94,22 +135,32 @@ async fn main() -> Result<()> {
             let skip_vuln = no_vuln_check || config.skip_vuln_check;
             let check_outdated = !no_outdated_check && config.check_outdated;
 
-            run_scan(source, format_str, skip_vuln, check_outdated, output).await?;
+            run_scan(
+                source,
+                format_str,
+                skip_vuln,
+                check_outdated,
+                output,
+                fail_on,
+                !no_parallel,
+            )
+            .await
         }
         Commands::ListSources => {
             list_sources();
+            Ok(exit_codes::SUCCESS)
         }
         Commands::Config { init, path } => {
             handle_config(init, path)?;
+            Ok(exit_codes::SUCCESS)
         }
         Commands::ClearCache => {
             let cache = Cache::new();
             cache.clear()?;
             println!("Cache cleared.");
+            Ok(exit_codes::SUCCESS)
         }
     }
-
-    Ok(())
 }
 
 async fn run_scan(
@@ -118,7 +169,9 @@ async fn run_scan(
     skip_vuln_check: bool,
     check_outdated: bool,
     output_file: Option<String>,
-) -> Result<()> {
+    fail_on: Option<FailLevel>,
+    parallel: bool,
+) -> Result<u8> {
     let format = OutputFormat::from_str(&format).map_err(|e| anyhow::anyhow!(e))?;
     let is_interactive = format == OutputFormat::Table;
 
@@ -129,52 +182,12 @@ async fn run_scan(
         all_scanners()
     };
 
-    let mut all_packages = Vec::new();
-
-    // Create progress bar for scanning
-    let scan_progress = if is_interactive {
-        let pb = ProgressBar::new(scanners.len() as u64);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
-                .unwrap()
-                .progress_chars("#>-"),
-        );
-        pb.enable_steady_tick(Duration::from_millis(100));
-        Some(pb)
+    // Scan packages (concurrently or sequentially)
+    let all_packages = if parallel && scanners.len() > 1 {
+        scan_concurrent(&scanners, is_interactive).await
     } else {
-        None
+        scan_sequential(&scanners, is_interactive).await
     };
-
-    for scanner in &scanners {
-        if let Some(ref pb) = scan_progress {
-            pb.set_message(format!("Scanning {}...", scanner.name()));
-        }
-
-        if !scanner.is_supported() {
-            if let Some(ref pb) = scan_progress {
-                pb.inc(1);
-            }
-            continue;
-        }
-
-        match scanner.scan().await {
-            Ok(packages) => {
-                all_packages.extend(packages);
-            }
-            Err(_) => {
-                // Silently continue on errors during scanning
-            }
-        }
-
-        if let Some(ref pb) = scan_progress {
-            pb.inc(1);
-        }
-    }
-
-    if let Some(pb) = scan_progress {
-        pb.finish_with_message(format!("Found {} packages", all_packages.len()));
-    }
 
     let mut result = ScanResult::new(all_packages);
 
@@ -254,7 +267,179 @@ async fn run_scan(
         print_result(&result, format)?;
     }
 
-    Ok(())
+    // Determine exit code based on --fail-on
+    Ok(determine_exit_code(&result, fail_on))
+}
+
+/// Scan all sources concurrently using tokio tasks
+async fn scan_concurrent(
+    scanners: &[Box<dyn Scanner>],
+    is_interactive: bool,
+) -> Vec<extenscan::Package> {
+    let progress = if is_interactive {
+        let pb = ProgressBar::new(scanners.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} Scanning sources...")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(100));
+        Some(Arc::new(pb))
+    } else {
+        None
+    };
+
+    // Create futures for each scanner
+    let futures: Vec<_> = scanners
+        .iter()
+        .map(|scanner| {
+            let pb = progress.clone();
+            async move {
+                let result = if scanner.is_supported() {
+                    scanner.scan().await.unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                if let Some(ref pb) = pb {
+                    pb.inc(1);
+                }
+                result
+            }
+        })
+        .collect();
+
+    // Run all scans concurrently
+    let results = join_all(futures).await;
+
+    if let Some(pb) = progress {
+        let total: usize = results.iter().map(|r| r.len()).sum();
+        pb.finish_with_message(format!("Found {} packages", total));
+    }
+
+    results.into_iter().flatten().collect()
+}
+
+/// Scan sources sequentially (original behavior)
+async fn scan_sequential(
+    scanners: &[Box<dyn Scanner>],
+    is_interactive: bool,
+) -> Vec<extenscan::Package> {
+    let mut all_packages = Vec::new();
+
+    let scan_progress = if is_interactive {
+        let pb = ProgressBar::new(scanners.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(100));
+        Some(pb)
+    } else {
+        None
+    };
+
+    for scanner in scanners {
+        if let Some(ref pb) = scan_progress {
+            pb.set_message(format!("Scanning {}...", scanner.name()));
+        }
+
+        if !scanner.is_supported() {
+            if let Some(ref pb) = scan_progress {
+                pb.inc(1);
+            }
+            continue;
+        }
+
+        match scanner.scan().await {
+            Ok(packages) => {
+                all_packages.extend(packages);
+            }
+            Err(_) => {
+                // Silently continue on errors during scanning
+            }
+        }
+
+        if let Some(ref pb) = scan_progress {
+            pb.inc(1);
+        }
+    }
+
+    if let Some(pb) = scan_progress {
+        pb.finish_with_message(format!("Found {} packages", all_packages.len()));
+    }
+
+    all_packages
+}
+
+/// Determine the exit code based on vulnerabilities found and --fail-on setting
+fn determine_exit_code(result: &ScanResult, fail_on: Option<FailLevel>) -> u8 {
+    let fail_on = match fail_on {
+        Some(level) => level,
+        None => return exit_codes::SUCCESS,
+    };
+
+    let has_critical = result
+        .vulnerabilities
+        .iter()
+        .any(|v| v.severity == Severity::Critical);
+    let has_high = result
+        .vulnerabilities
+        .iter()
+        .any(|v| v.severity == Severity::High);
+    let has_medium = result
+        .vulnerabilities
+        .iter()
+        .any(|v| v.severity == Severity::Medium);
+    let has_low = result
+        .vulnerabilities
+        .iter()
+        .any(|v| v.severity == Severity::Low);
+
+    match fail_on {
+        FailLevel::Critical => {
+            if has_critical {
+                exit_codes::CRITICAL_VULN
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+        FailLevel::High => {
+            if has_critical {
+                exit_codes::CRITICAL_VULN
+            } else if has_high {
+                exit_codes::HIGH_VULN
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+        FailLevel::Medium => {
+            if has_critical {
+                exit_codes::CRITICAL_VULN
+            } else if has_high {
+                exit_codes::HIGH_VULN
+            } else if has_medium {
+                exit_codes::MEDIUM_VULN
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+        FailLevel::Low => {
+            if has_critical {
+                exit_codes::CRITICAL_VULN
+            } else if has_high {
+                exit_codes::HIGH_VULN
+            } else if has_medium {
+                exit_codes::MEDIUM_VULN
+            } else if has_low {
+                exit_codes::LOW_VULN
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+    }
 }
 
 fn list_sources() {

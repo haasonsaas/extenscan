@@ -18,6 +18,10 @@
 //! default_format = "table"
 //! check_outdated = true
 //! default_sources = ["vscode", "chrome", "npm"]
+//!
+//! [ignore]
+//! packages = ["lodash", "underscore"]
+//! vulnerabilities = ["CVE-2021-12345"]
 //! ```
 
 use anyhow::Result;
@@ -63,7 +67,7 @@ pub struct Config {
 
     /// Default output format when no `--format` flag is provided.
     ///
-    /// Valid values: "table", "json"
+    /// Valid values: "table", "json", "sarif"
     /// Default: "table"
     pub default_format: String,
 
@@ -71,6 +75,104 @@ pub struct Config {
     ///
     /// Default: true
     pub check_outdated: bool,
+
+    /// Ignore list configuration for suppressing known issues.
+    #[serde(default)]
+    pub ignore: IgnoreConfig,
+}
+
+/// Configuration for ignoring specific packages or vulnerabilities.
+///
+/// Use this to suppress known false positives or accepted risks.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IgnoreConfig {
+    /// Package IDs to exclude from scanning.
+    ///
+    /// Packages matching these IDs will not appear in results.
+    /// Supports glob patterns (e.g., "lodash*", "@types/*").
+    pub packages: Vec<String>,
+
+    /// Vulnerability IDs to ignore (e.g., "CVE-2021-12345", "GHSA-xxxx").
+    ///
+    /// These vulnerabilities will not be reported even if found.
+    pub vulnerabilities: Vec<String>,
+
+    /// Package IDs to exclude from outdated checks.
+    ///
+    /// Useful for packages intentionally pinned to older versions.
+    pub outdated: Vec<String>,
+}
+
+impl IgnoreConfig {
+    /// Check if a package should be ignored.
+    pub fn should_ignore_package(&self, package_id: &str) -> bool {
+        self.packages.iter().any(|pattern| {
+            if pattern.contains('*') {
+                glob_match(pattern, package_id)
+            } else {
+                pattern == package_id
+            }
+        })
+    }
+
+    /// Check if a vulnerability should be ignored.
+    pub fn should_ignore_vulnerability(&self, vuln_id: &str) -> bool {
+        self.vulnerabilities.iter().any(|id| id == vuln_id)
+    }
+
+    /// Check if outdated check should be skipped for a package.
+    pub fn should_ignore_outdated(&self, package_id: &str) -> bool {
+        self.outdated.iter().any(|pattern| {
+            if pattern.contains('*') {
+                glob_match(pattern, package_id)
+            } else {
+                pattern == package_id
+            }
+        })
+    }
+}
+
+/// Simple glob matching (supports * as wildcard).
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+
+    if parts.len() == 1 {
+        return pattern == text;
+    }
+
+    let mut remaining = text;
+
+    // Check prefix (before first *)
+    if !parts[0].is_empty() {
+        if !remaining.starts_with(parts[0]) {
+            return false;
+        }
+        remaining = &remaining[parts[0].len()..];
+    }
+
+    // Check suffix (after last *)
+    let last_part = parts[parts.len() - 1];
+    if !last_part.is_empty() {
+        if !remaining.ends_with(last_part) {
+            return false;
+        }
+        remaining = &remaining[..remaining.len() - last_part.len()];
+    }
+
+    // Check middle parts
+    for part in &parts[1..parts.len() - 1] {
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(pos) = remaining.find(part) {
+            remaining = &remaining[pos + part.len()..];
+        } else {
+            return false;
+        }
+    }
+
+    true
 }
 
 impl Default for Config {
@@ -88,6 +190,7 @@ impl Default for Config {
             skip_vuln_check: false,
             default_format: "table".to_string(),
             check_outdated: true,
+            ignore: IgnoreConfig::default(),
         }
     }
 }
@@ -185,5 +288,97 @@ impl Config {
     pub fn generate_default_config() -> String {
         let config = Config::default();
         toml::to_string_pretty(&config).unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_glob_match_exact() {
+        assert!(glob_match("lodash", "lodash"));
+        assert!(!glob_match("lodash", "underscore"));
+    }
+
+    #[test]
+    fn test_glob_match_prefix() {
+        assert!(glob_match("lodash*", "lodash"));
+        assert!(glob_match("lodash*", "lodash.debounce"));
+        assert!(glob_match("lodash*", "lodash-es"));
+        assert!(!glob_match("lodash*", "underscore"));
+    }
+
+    #[test]
+    fn test_glob_match_suffix() {
+        assert!(glob_match("*-cli", "typescript-cli"));
+        assert!(glob_match("*-cli", "eslint-cli"));
+        assert!(!glob_match("*-cli", "typescript"));
+    }
+
+    #[test]
+    fn test_glob_match_contains() {
+        assert!(glob_match("*lodash*", "lodash"));
+        assert!(glob_match("*lodash*", "my-lodash-plugin"));
+        assert!(!glob_match("*lodash*", "underscore"));
+    }
+
+    #[test]
+    fn test_glob_match_scoped() {
+        assert!(glob_match("@types/*", "@types/node"));
+        assert!(glob_match("@types/*", "@types/react"));
+        assert!(!glob_match("@types/*", "@babel/core"));
+    }
+
+    #[test]
+    fn test_ignore_config_packages() {
+        let config = IgnoreConfig {
+            packages: vec!["lodash".to_string(), "@types/*".to_string()],
+            vulnerabilities: vec![],
+            outdated: vec![],
+        };
+
+        assert!(config.should_ignore_package("lodash"));
+        assert!(config.should_ignore_package("@types/node"));
+        assert!(config.should_ignore_package("@types/react"));
+        assert!(!config.should_ignore_package("underscore"));
+        assert!(!config.should_ignore_package("@babel/core"));
+    }
+
+    #[test]
+    fn test_ignore_config_vulnerabilities() {
+        let config = IgnoreConfig {
+            packages: vec![],
+            vulnerabilities: vec!["CVE-2021-12345".to_string(), "GHSA-xxxx".to_string()],
+            outdated: vec![],
+        };
+
+        assert!(config.should_ignore_vulnerability("CVE-2021-12345"));
+        assert!(config.should_ignore_vulnerability("GHSA-xxxx"));
+        assert!(!config.should_ignore_vulnerability("CVE-2022-99999"));
+    }
+
+    #[test]
+    fn test_ignore_config_outdated() {
+        let config = IgnoreConfig {
+            packages: vec![],
+            vulnerabilities: vec![],
+            outdated: vec!["typescript".to_string()],
+        };
+
+        assert!(config.should_ignore_outdated("typescript"));
+        assert!(!config.should_ignore_outdated("eslint"));
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+
+        assert_eq!(config.cache_ttl_hours, 24);
+        assert_eq!(config.default_format, "table");
+        assert!(config.check_outdated);
+        assert!(!config.skip_vuln_check);
+        assert_eq!(config.default_sources.len(), 6);
+        assert!(config.ignore.packages.is_empty());
     }
 }

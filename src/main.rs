@@ -45,7 +45,7 @@ enum Commands {
         #[arg(short, long)]
         source: Option<String>,
 
-        /// Output format (table, json, sarif)
+        /// Output format (table, json, sarif, cyclonedx)
         #[arg(short, long)]
         format: Option<String>,
 

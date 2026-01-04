@@ -66,10 +66,25 @@ extenscan scan --source chrome
 extenscan scan --source firefox
 extenscan scan --source homebrew
 
-# Multiple output options
+# Multiple output formats
 extenscan scan                      # CLI table (default)
 extenscan scan --format json        # JSON output
+extenscan scan --format sarif       # SARIF for GitHub Actions
+extenscan scan --format cyclonedx   # CycloneDX SBOM
 extenscan scan --output report.json # Save to file
+```
+
+### CI/CD Integration
+
+```bash
+# Fail pipeline if critical/high vulnerabilities found
+extenscan scan --fail-on high
+
+# Generate SARIF for GitHub Code Scanning
+extenscan scan --format sarif > results.sarif
+
+# Generate SBOM for compliance
+extenscan scan --format cyclonedx > sbom.json
 ```
 
 ### Performance Options
@@ -80,6 +95,9 @@ extenscan scan --no-vuln-check
 
 # Skip outdated version checking
 extenscan scan --no-outdated-check
+
+# Disable parallel scanning (sequential mode)
+extenscan scan --no-parallel
 
 # Clear cache before scanning
 extenscan scan --clear-cache
@@ -247,7 +265,7 @@ cache_ttl_hours = 24
 # Skip vulnerability checking by default
 skip_vuln_check = false
 
-# Default output format ("table" or "json")
+# Default output format ("table", "json", "sarif", "cyclonedx")
 default_format = "table"
 
 # Check for outdated packages by default
@@ -255,6 +273,17 @@ check_outdated = true
 
 # Sources to scan by default
 default_sources = ["vscode", "chrome", "edge", "firefox", "npm", "homebrew"]
+
+# Ignore specific packages, vulnerabilities, or outdated warnings
+[ignore]
+# Packages to exclude from scanning (supports glob patterns)
+packages = ["@types/*", "typescript"]
+
+# Vulnerability IDs to suppress (e.g., accepted risks)
+vulnerabilities = ["CVE-2021-12345", "GHSA-xxxx-yyyy"]
+
+# Packages to exclude from outdated checks (pinned versions)
+outdated = ["lodash"]
 ```
 
 ## Cache

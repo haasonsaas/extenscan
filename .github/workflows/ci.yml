@@ -20,7 +20,7 @@ jobs:
         rust: [stable]
         include:
           - os: ubuntu-latest
-            rust: "1.78"  # MSRV (Cargo.lock v4 support)
+            rust: "1.83"  # MSRV (required by icu/idna dependencies)
 
     steps:
       - uses: actions/checkout@v4

@@ -40,7 +40,10 @@ struct OutdatedRow {
 
 pub fn print_cli_table(result: &ScanResult) -> Result<()> {
     println!();
-    println!("Scan completed at: {}", result.scan_time.format("%Y-%m-%d %H:%M:%S UTC"));
+    println!(
+        "Scan completed at: {}",
+        result.scan_time.format("%Y-%m-%d %H:%M:%S UTC")
+    );
     println!();
 
     // Packages table
@@ -141,17 +144,35 @@ fn truncate(s: &str, max_len: usize) -> String {
 }
 
 fn print_summary(result: &ScanResult) {
-    let critical = result.vulnerabilities.iter().filter(|v| v.severity == Severity::Critical).count();
-    let high = result.vulnerabilities.iter().filter(|v| v.severity == Severity::High).count();
-    let medium = result.vulnerabilities.iter().filter(|v| v.severity == Severity::Medium).count();
-    let low = result.vulnerabilities.iter().filter(|v| v.severity == Severity::Low).count();
+    let critical = result
+        .vulnerabilities
+        .iter()
+        .filter(|v| v.severity == Severity::Critical)
+        .count();
+    let high = result
+        .vulnerabilities
+        .iter()
+        .filter(|v| v.severity == Severity::High)
+        .count();
+    let medium = result
+        .vulnerabilities
+        .iter()
+        .filter(|v| v.severity == Severity::Medium)
+        .count();
+    let low = result
+        .vulnerabilities
+        .iter()
+        .filter(|v| v.severity == Severity::Low)
+        .count();
 
     println!("Summary:");
     println!("  Total packages: {}", result.packages.len());
 
     if !result.vulnerabilities.is_empty() {
-        println!("  Vulnerabilities: {} critical, {} high, {} medium, {} low",
-            critical, high, medium, low);
+        println!(
+            "  Vulnerabilities: {} critical, {} high, {} medium, {} low",
+            critical, high, medium, low
+        );
     }
 
     if !result.outdated.is_empty() {

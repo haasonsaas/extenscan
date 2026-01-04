@@ -2,7 +2,7 @@
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/haasonsaas/extenscan/ci.yml?branch=main&label=build)](https://github.com/haasonsaas/extenscan/actions)
 [![License](https://img.shields.io/github/license/haasonsaas/extenscan?color=green)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.78%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
 [![GitHub release](https://img.shields.io/github/v/release/haasonsaas/extenscan?include_prereleases&label=version)](https://github.com/haasonsaas/extenscan/releases)
 
 A cross-platform CLI tool and library that scans locally installed extensions and packages from multiple sources, checking for security vulnerabilities, outdated versions, and generating inventory reports.

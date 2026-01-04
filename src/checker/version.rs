@@ -79,7 +79,8 @@ impl VersionChecker {
 
         let url = format!("https://registry.npmjs.org/{}", name);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -115,11 +116,7 @@ impl VersionChecker {
 
         let url = format!("https://formulae.brew.sh/api/formula/{}.json", name);
 
-        let response = self.client
-            .get(&url)
-            .send()
-            .await
-            .ok()?;
+        let response = self.client.get(&url).send().await.ok()?;
 
         if !response.status().is_success() {
             return None;

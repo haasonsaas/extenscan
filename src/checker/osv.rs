@@ -137,7 +137,9 @@ impl super::VulnerabilityChecker for OsvChecker {
                         id: vuln.id,
                         package_id: package.id.clone(),
                         severity,
-                        title: vuln.summary.unwrap_or_else(|| "Unknown vulnerability".to_string()),
+                        title: vuln
+                            .summary
+                            .unwrap_or_else(|| "Unknown vulnerability".to_string()),
                         description: vuln.details,
                         fixed_version,
                         reference_url,
@@ -185,7 +187,11 @@ fn parse_severity(vuln: &OsvVuln) -> Severity {
 fn extract_fixed_version(vuln: &OsvVuln) -> Option<String> {
     vuln.affected.as_ref()?.iter().find_map(|affected| {
         affected.ranges.as_ref()?.iter().find_map(|range| {
-            range.events.as_ref()?.iter().find_map(|event| event.fixed.clone())
+            range
+                .events
+                .as_ref()?
+                .iter()
+                .find_map(|event| event.fixed.clone())
         })
     })
 }

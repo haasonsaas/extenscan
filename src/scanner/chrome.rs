@@ -41,7 +41,10 @@ impl super::Scanner for ChromeScanner {
     }
 }
 
-pub fn scan_chromium_extensions(extensions_dir: &std::path::Path, source: Source) -> Result<Vec<Package>> {
+pub fn scan_chromium_extensions(
+    extensions_dir: &std::path::Path,
+    source: Source,
+) -> Result<Vec<Package>> {
     let mut packages = Vec::new();
 
     let entries = fs::read_dir(extensions_dir)
@@ -58,18 +61,11 @@ pub fn scan_chromium_extensions(extensions_dir: &std::path::Path, source: Source
         // Each extension has version subdirectories
         let version_dirs: Vec<_> = fs::read_dir(&ext_path)
             .ok()
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .filter(|e| e.path().is_dir())
-                    .collect()
-            })
+            .map(|entries| entries.flatten().filter(|e| e.path().is_dir()).collect())
             .unwrap_or_default();
 
         // Get the latest version (last in sorted order)
-        let latest_version_dir = version_dirs
-            .into_iter()
-            .max_by_key(|e| e.file_name());
+        let latest_version_dir = version_dirs.into_iter().max_by_key(|e| e.file_name());
 
         let version_path = match latest_version_dir {
             Some(dir) => dir.path(),
@@ -91,8 +87,7 @@ pub fn scan_chromium_extensions(extensions_dir: &std::path::Path, source: Source
             Err(_) => continue,
         };
 
-        let name = manifest.name
-            .unwrap_or_else(|| extension_id.clone());
+        let name = manifest.name.unwrap_or_else(|| extension_id.clone());
 
         // Handle Chrome's __MSG_xxx__ localized names
         let name = if name.starts_with("__MSG_") {
@@ -106,7 +101,11 @@ pub fn scan_chromium_extensions(extensions_dir: &std::path::Path, source: Source
 
         let metadata = PackageMetadata {
             description: manifest.description.and_then(|d| {
-                if d.starts_with("__MSG_") { None } else { Some(d) }
+                if d.starts_with("__MSG_") {
+                    None
+                } else {
+                    Some(d)
+                }
             }),
             publisher: manifest.author,
             homepage: manifest.homepage_url,
@@ -125,9 +124,7 @@ pub fn scan_chromium_extensions(extensions_dir: &std::path::Path, source: Source
 }
 
 fn get_localized_name(version_path: &std::path::Path, msg_key: &str) -> Option<String> {
-    let key = msg_key
-        .trim_start_matches("__MSG_")
-        .trim_end_matches("__");
+    let key = msg_key.trim_start_matches("__MSG_").trim_end_matches("__");
 
     let locales_dir = version_path.join("_locales");
 
@@ -136,7 +133,10 @@ fn get_localized_name(version_path: &std::path::Path, msg_key: &str) -> Option<S
         let messages_path = locales_dir.join(locale).join("messages.json");
         if let Ok(content) = fs::read_to_string(&messages_path) {
             if let Ok(messages) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(msg) = messages.get(key).or_else(|| messages.get(&key.to_lowercase())) {
+                if let Some(msg) = messages
+                    .get(key)
+                    .or_else(|| messages.get(&key.to_lowercase()))
+                {
                     if let Some(message) = msg.get("message").and_then(|m| m.as_str()) {
                         return Some(message.to_string());
                     }

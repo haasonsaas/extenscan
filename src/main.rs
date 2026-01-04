@@ -14,7 +14,11 @@ use std::time::Duration;
 
 #[derive(Parser)]
 #[command(name = "extenscan")]
-#[command(author, version, about = "Scan installed extensions and packages for vulnerabilities")]
+#[command(
+    author,
+    version,
+    about = "Scan installed extensions and packages for vulnerabilities"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -235,10 +239,7 @@ async fn run_scan(
         }
 
         if let Some(pb) = outdated_progress {
-            pb.finish_with_message(format!(
-                "Found {} outdated packages",
-                result.outdated.len()
-            ));
+            pb.finish_with_message(format!("Found {} outdated packages", result.outdated.len()));
         }
     }
 

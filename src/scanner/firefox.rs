@@ -116,8 +116,8 @@ fn scan_firefox_profile(profile_path: &Path) -> Result<Vec<Package>> {
                 if filename.ends_with(".xpi") {
                     let id = filename.trim_end_matches(".xpi").to_string();
                     if !packages.iter().any(|p| p.id == id) {
-                        let package = Package::new(&id, &id, "unknown", Source::Firefox)
-                            .with_path(path);
+                        let package =
+                            Package::new(&id, &id, "unknown", Source::Firefox).with_path(path);
                         packages.push(package);
                     }
                 }
@@ -147,8 +147,5 @@ fn parse_firefox_addon(addon: FirefoxAddon) -> Option<Package> {
         license: None,
     };
 
-    Some(
-        Package::new(id, name, version, Source::Firefox)
-            .with_metadata(metadata)
-    )
+    Some(Package::new(id, name, version, Source::Firefox).with_metadata(metadata))
 }

@@ -81,13 +81,14 @@ fn scan_formulae() -> Result<Vec<Package>> {
         formulae: Vec<BrewFormula>,
     }
 
-    let brew_info: BrewInfo = serde_json::from_str(&stdout)
-        .context("Failed to parse brew info output")?;
+    let brew_info: BrewInfo =
+        serde_json::from_str(&stdout).context("Failed to parse brew info output")?;
 
     let mut packages = Vec::new();
 
     for formula in brew_info.formulae {
-        let version = formula.installed
+        let version = formula
+            .installed
             .first()
             .map(|v| v.version.clone())
             .or(formula.version)
@@ -103,8 +104,8 @@ fn scan_formulae() -> Result<Vec<Package>> {
 
         let id = formula.full_name.unwrap_or_else(|| formula.name.clone());
 
-        let package = Package::new(&id, &formula.name, version, Source::Homebrew)
-            .with_metadata(metadata);
+        let package =
+            Package::new(&id, &formula.name, version, Source::Homebrew).with_metadata(metadata);
 
         packages.push(package);
     }
@@ -129,13 +130,15 @@ fn scan_casks() -> Result<Vec<Package>> {
         casks: Vec<BrewCask>,
     }
 
-    let brew_info: BrewCaskInfo = serde_json::from_str(&stdout)
-        .context("Failed to parse brew cask info output")?;
+    let brew_info: BrewCaskInfo =
+        serde_json::from_str(&stdout).context("Failed to parse brew cask info output")?;
 
     let mut packages = Vec::new();
 
     for cask in brew_info.casks {
-        let name = cask.name.first()
+        let name = cask
+            .name
+            .first()
             .cloned()
             .unwrap_or_else(|| cask.token.clone());
 
@@ -149,8 +152,8 @@ fn scan_casks() -> Result<Vec<Package>> {
             license: None,
         };
 
-        let package = Package::new(&cask.token, name, version, Source::Homebrew)
-            .with_metadata(metadata);
+        let package =
+            Package::new(&cask.token, name, version, Source::Homebrew).with_metadata(metadata);
 
         packages.push(package);
     }

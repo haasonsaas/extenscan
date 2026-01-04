@@ -34,7 +34,11 @@ impl super::Scanner for NpmScanner {
 
     async fn scan(&self) -> Result<Vec<Package>> {
         // Check if npm is available
-        let npm_cmd = if cfg!(target_os = "windows") { "npm.cmd" } else { "npm" };
+        let npm_cmd = if cfg!(target_os = "windows") {
+            "npm.cmd"
+        } else {
+            "npm"
+        };
 
         let output = Command::new(npm_cmd)
             .args(["list", "-g", "--json", "--depth=0"])
@@ -50,8 +54,8 @@ impl super::Scanner for NpmScanner {
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let npm_list: NpmListOutput = serde_json::from_str(&stdout)
-            .context("Failed to parse npm list output")?;
+        let npm_list: NpmListOutput =
+            serde_json::from_str(&stdout).context("Failed to parse npm list output")?;
 
         let mut packages = Vec::new();
 
@@ -72,8 +76,8 @@ impl super::Scanner for NpmScanner {
                     license: None,
                 };
 
-                let package = Package::new(&name, &name, version, Source::Npm)
-                    .with_metadata(metadata);
+                let package =
+                    Package::new(&name, &name, version, Source::Npm).with_metadata(metadata);
 
                 packages.push(package);
             }

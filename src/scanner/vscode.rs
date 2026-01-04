@@ -58,8 +58,12 @@ impl super::Scanner for VscodeScanner {
 
         let mut packages = Vec::new();
 
-        let entries = fs::read_dir(&extensions_dir)
-            .with_context(|| format!("Failed to read VSCode extensions directory: {:?}", extensions_dir))?;
+        let entries = fs::read_dir(&extensions_dir).with_context(|| {
+            format!(
+                "Failed to read VSCode extensions directory: {:?}",
+                extensions_dir
+            )
+        })?;
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -82,17 +86,19 @@ impl super::Scanner for VscodeScanner {
                 Err(_) => continue,
             };
 
-            let name = pkg_json.display_name
+            let name = pkg_json
+                .display_name
                 .or(pkg_json.name.clone())
                 .unwrap_or_else(|| "Unknown".to_string());
 
             let version = pkg_json.version.unwrap_or_else(|| "0.0.0".to_string());
 
-            let id = if let (Some(publisher), Some(pkg_name)) = (&pkg_json.publisher, &pkg_json.name) {
-                format!("{}.{}", publisher, pkg_name)
-            } else {
-                entry.file_name().to_string_lossy().to_string()
-            };
+            let id =
+                if let (Some(publisher), Some(pkg_name)) = (&pkg_json.publisher, &pkg_json.name) {
+                    format!("{}.{}", publisher, pkg_name)
+                } else {
+                    entry.file_name().to_string_lossy().to_string()
+                };
 
             let metadata = PackageMetadata {
                 description: pkg_json.description,

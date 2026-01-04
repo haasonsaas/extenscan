@@ -20,7 +20,7 @@ jobs:
         rust: [stable]
         include:
           - os: ubuntu-latest
-            rust: "1.70"  # MSRV
+            rust: "1.78"  # MSRV (Cargo.lock v4 support)
 
     steps:
       - uses: actions/checkout@v4

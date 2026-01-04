@@ -135,7 +135,7 @@ fn get_localized_name(version_path: &std::path::Path, msg_key: &str) -> Option<S
             if let Ok(messages) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(msg) = messages
                     .get(key)
-                    .or_else(|| messages.get(&key.to_lowercase()))
+                    .or_else(|| messages.get(key.to_lowercase()))
                 {
                     if let Some(message) = msg.get("message").and_then(|m| m.as_str()) {
                         return Some(message.to_string());

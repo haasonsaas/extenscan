@@ -113,7 +113,7 @@ impl Platform {
 ///
 /// Not all fields are populated for every package; availability depends
 /// on what information the source provides.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PackageMetadata {
     /// A brief description of the package's purpose.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -134,18 +134,6 @@ pub struct PackageMetadata {
     /// The package's license identifier (e.g., "MIT", "Apache-2.0").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
-}
-
-impl Default for PackageMetadata {
-    fn default() -> Self {
-        Self {
-            description: None,
-            publisher: None,
-            homepage: None,
-            repository: None,
-            license: None,
-        }
-    }
 }
 
 /// A scanned package or extension.

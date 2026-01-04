@@ -187,12 +187,10 @@ impl Cache {
     /// Returns an error if the cache directory cannot be read.
     pub fn clear(&self) -> Result<()> {
         if self.dir.exists() {
-            for entry in fs::read_dir(&self.dir)? {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.extension().map(|e| e == "json").unwrap_or(false) {
-                        let _ = fs::remove_file(path);
-                    }
+            for entry in fs::read_dir(&self.dir)?.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "json").unwrap_or(false) {
+                    let _ = fs::remove_file(path);
                 }
             }
         }

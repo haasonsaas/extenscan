@@ -274,12 +274,7 @@ fn list_sources() {
         let scanner = get_scanner(parse_source(id).unwrap());
         let supported = if scanner.is_supported() { "yes" } else { "no" };
 
-        println!(
-            "  {:<12} {:<25} {}",
-            id,
-            name,
-            format!("[supported: {}]", supported)
-        );
+        println!("  {:<12} {:<25} [supported: {}]", id, name, supported);
         println!("  {:<12} Location: {}", "", location);
         println!();
     }

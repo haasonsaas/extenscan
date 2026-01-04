@@ -262,7 +262,10 @@ mod tests {
     fn test_platform_current() {
         let platform = Platform::current();
         // Should return one of the valid variants
-        matches!(platform, Platform::Linux | Platform::MacOS | Platform::Windows);
+        matches!(
+            platform,
+            Platform::Linux | Platform::MacOS | Platform::Windows
+        );
     }
 
     #[test]
@@ -300,10 +303,7 @@ mod tests {
 
         let pkg = Package::new("test", "Test", "1.0.0", Source::Npm).with_metadata(metadata);
 
-        assert_eq!(
-            pkg.metadata.description,
-            Some("A test package".to_string())
-        );
+        assert_eq!(pkg.metadata.description, Some("A test package".to_string()));
         assert_eq!(pkg.metadata.license, Some("MIT".to_string()));
     }
 

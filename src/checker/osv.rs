@@ -344,7 +344,10 @@ mod tests {
     #[test]
     fn test_osv_checker_get_ecosystem() {
         assert_eq!(OsvChecker::get_ecosystem(&Source::Npm), Some("npm"));
-        assert_eq!(OsvChecker::get_ecosystem(&Source::Homebrew), Some("Homebrew"));
+        assert_eq!(
+            OsvChecker::get_ecosystem(&Source::Homebrew),
+            Some("Homebrew")
+        );
         assert_eq!(OsvChecker::get_ecosystem(&Source::Chrome), None);
         assert_eq!(OsvChecker::get_ecosystem(&Source::Vscode), None);
         assert_eq!(OsvChecker::get_ecosystem(&Source::Edge), None);

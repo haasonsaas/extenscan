@@ -19,6 +19,16 @@ pub enum Source {
     Edge,
     /// Mozilla Firefox browser add-ons
     Firefox,
+    /// Brave browser extensions
+    Brave,
+    /// Arc browser extensions
+    Arc,
+    /// Opera browser extensions
+    Opera,
+    /// Vivaldi browser extensions
+    Vivaldi,
+    /// Chromium browser extensions
+    Chromium,
     /// NPM global packages
     Npm,
     /// Homebrew formulae and casks
@@ -42,6 +52,11 @@ impl Source {
             Source::Chrome => "chrome",
             Source::Edge => "edge",
             Source::Firefox => "firefox",
+            Source::Brave => "brave",
+            Source::Arc => "arc",
+            Source::Opera => "opera",
+            Source::Vivaldi => "vivaldi",
+            Source::Chromium => "chromium",
             Source::Npm => "npm",
             Source::Homebrew => "homebrew",
         }
@@ -63,6 +78,11 @@ impl Source {
             Source::Chrome => "Chrome",
             Source::Edge => "Edge",
             Source::Firefox => "Firefox",
+            Source::Brave => "Brave",
+            Source::Arc => "Arc",
+            Source::Opera => "Opera",
+            Source::Vivaldi => "Vivaldi",
+            Source::Chromium => "Chromium",
             Source::Npm => "NPM",
             Source::Homebrew => "Homebrew",
         }
@@ -254,6 +274,11 @@ mod tests {
         assert_eq!(Source::Chrome.as_str(), "chrome");
         assert_eq!(Source::Edge.as_str(), "edge");
         assert_eq!(Source::Firefox.as_str(), "firefox");
+        assert_eq!(Source::Brave.as_str(), "brave");
+        assert_eq!(Source::Arc.as_str(), "arc");
+        assert_eq!(Source::Opera.as_str(), "opera");
+        assert_eq!(Source::Vivaldi.as_str(), "vivaldi");
+        assert_eq!(Source::Chromium.as_str(), "chromium");
         assert_eq!(Source::Npm.as_str(), "npm");
         assert_eq!(Source::Homebrew.as_str(), "homebrew");
     }

@@ -224,6 +224,7 @@ async fn run() -> Result<u8> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_scan(
     source_filter: Option<String>,
     format: String,
@@ -569,6 +570,15 @@ fn list_sources() {
         ("chrome", "Chrome Extensions", "Browser profile directory"),
         ("edge", "Edge Extensions", "Browser profile directory"),
         ("firefox", "Firefox Add-ons", "Browser profile directory"),
+        ("brave", "Brave Extensions", "Browser profile directory"),
+        ("arc", "Arc Extensions", "Browser profile directory (macOS)"),
+        ("opera", "Opera Extensions", "Browser profile directory"),
+        ("vivaldi", "Vivaldi Extensions", "Browser profile directory"),
+        (
+            "chromium",
+            "Chromium Extensions",
+            "Browser profile directory",
+        ),
         ("npm", "NPM Global Packages", "npm list -g"),
         ("homebrew", "Homebrew Packages", "brew info --installed"),
     ];
@@ -628,10 +638,15 @@ fn parse_source(s: &str) -> Result<Source> {
         "chrome" => Ok(Source::Chrome),
         "edge" => Ok(Source::Edge),
         "firefox" => Ok(Source::Firefox),
+        "brave" => Ok(Source::Brave),
+        "arc" => Ok(Source::Arc),
+        "opera" => Ok(Source::Opera),
+        "vivaldi" => Ok(Source::Vivaldi),
+        "chromium" => Ok(Source::Chromium),
         "npm" => Ok(Source::Npm),
         "homebrew" | "brew" => Ok(Source::Homebrew),
         _ => Err(anyhow::anyhow!(
-            "Unknown source: {}. Use: vscode, chrome, edge, firefox, npm, homebrew",
+            "Unknown source: {}. Use: vscode, chrome, edge, firefox, brave, arc, opera, vivaldi, chromium, npm, homebrew",
             s
         )),
     }
@@ -652,7 +667,10 @@ async fn show_package_info(package_name: &str) -> Result<()> {
         if let Ok(packages) = scanner.scan().await {
             for pkg in packages {
                 if pkg.id.to_lowercase().contains(&package_name.to_lowercase())
-                    || pkg.name.to_lowercase().contains(&package_name.to_lowercase())
+                    || pkg
+                        .name
+                        .to_lowercase()
+                        .contains(&package_name.to_lowercase())
                 {
                     found = true;
                     println!("Package: {}", pkg.name);
@@ -692,15 +710,23 @@ async fn show_package_info(package_name: &str) -> Result<()> {
                     if let Some(ref risk) = pkg.extension_risk {
                         println!();
                         println!("  Security Risk Analysis:");
-                        println!("    Risk Level: {} (score: {})", risk.risk_level.to_uppercase(), risk.total_score);
+                        println!(
+                            "    Risk Level: {} (score: {})",
+                            risk.risk_level.to_uppercase(),
+                            risk.total_score
+                        );
 
                         if !risk.permissions.is_empty() {
-                            let high_risk: Vec<_> = risk.permissions.iter()
-                                .filter(|p| matches!(p.level,
+                            let high_risk: Vec<_> =
+                                risk.permissions
+                                    .iter()
+                                    .filter(|p| {
+                                        matches!(p.level,
                                     extenscan::checker::extension_risk::RiskLevel::Critical |
                                     extenscan::checker::extension_risk::RiskLevel::High
-                                ))
-                                .collect();
+                                )
+                                    })
+                                    .collect();
 
                             if !high_risk.is_empty() {
                                 println!("    High-risk permissions:");
@@ -727,7 +753,7 @@ async fn show_package_info(package_name: &str) -> Result<()> {
 
                     // Check for vulnerabilities
                     let checker = default_checker();
-                    if let Ok(vulns) = checker.check(&[pkg.clone()]).await {
+                    if let Ok(vulns) = checker.check(std::slice::from_ref(&pkg)).await {
                         if !vulns.is_empty() {
                             println!();
                             println!("  Vulnerabilities ({}):", vulns.len());
@@ -745,7 +771,10 @@ async fn show_package_info(package_name: &str) -> Result<()> {
                     // Check if outdated (skip for unknown versions)
                     if pkg.version != "unknown" {
                         let version_checker = default_version_checker();
-                        if let Ok(outdated) = version_checker.check_outdated(&[pkg.clone()]).await {
+                        if let Ok(outdated) = version_checker
+                            .check_outdated(std::slice::from_ref(&pkg))
+                            .await
+                        {
                             if let Some(info) = outdated.first() {
                                 println!();
                                 println!(

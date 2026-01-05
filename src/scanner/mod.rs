@@ -11,6 +11,11 @@
 //! | [`ChromeScanner`] | Chrome extensions | All |
 //! | [`EdgeScanner`] | Edge extensions | All |
 //! | [`FirefoxScanner`] | Firefox add-ons | All |
+//! | [`BraveScanner`] | Brave extensions | All |
+//! | [`ArcScanner`] | Arc extensions | macOS |
+//! | [`OperaScanner`] | Opera extensions | All |
+//! | [`VivaldiScanner`] | Vivaldi extensions | All |
+//! | [`ChromiumScanner`] | Chromium extensions | All |
 //! | [`NpmScanner`] | NPM global packages | All |
 //! | [`HomebrewScanner`] | Homebrew packages | Linux, macOS |
 //!
@@ -32,18 +37,28 @@
 //! }
 //! ```
 
-mod chrome;
+mod arc;
+mod brave;
+pub(crate) mod chrome;
+mod chromium;
 mod edge;
 mod firefox;
 mod homebrew;
 mod npm;
+mod opera;
+mod vivaldi;
 mod vscode;
 
+pub use arc::ArcScanner;
+pub use brave::BraveScanner;
 pub use chrome::ChromeScanner;
+pub use chromium::ChromiumScanner;
 pub use edge::EdgeScanner;
 pub use firefox::FirefoxScanner;
 pub use homebrew::HomebrewScanner;
 pub use npm::NpmScanner;
+pub use opera::OperaScanner;
+pub use vivaldi::VivaldiScanner;
 pub use vscode::VscodeScanner;
 
 use crate::model::{Package, Platform, Source};
@@ -113,7 +128,7 @@ pub trait Scanner: Send + Sync {
 /// use extenscan::scanner::all_scanners;
 ///
 /// let scanners = all_scanners();
-/// assert_eq!(scanners.len(), 6); // VSCode, Chrome, Edge, Firefox, NPM, Homebrew
+/// assert_eq!(scanners.len(), 11); // All browser + package manager scanners
 /// ```
 pub fn all_scanners() -> Vec<Box<dyn Scanner>> {
     vec![
@@ -121,6 +136,11 @@ pub fn all_scanners() -> Vec<Box<dyn Scanner>> {
         Box::new(ChromeScanner),
         Box::new(EdgeScanner),
         Box::new(FirefoxScanner),
+        Box::new(BraveScanner),
+        Box::new(ArcScanner),
+        Box::new(OperaScanner),
+        Box::new(VivaldiScanner),
+        Box::new(ChromiumScanner),
         Box::new(NpmScanner),
         Box::new(HomebrewScanner),
     ]
@@ -146,6 +166,11 @@ pub fn get_scanner(source: Source) -> Box<dyn Scanner> {
         Source::Chrome => Box::new(ChromeScanner),
         Source::Edge => Box::new(EdgeScanner),
         Source::Firefox => Box::new(FirefoxScanner),
+        Source::Brave => Box::new(BraveScanner),
+        Source::Arc => Box::new(ArcScanner),
+        Source::Opera => Box::new(OperaScanner),
+        Source::Vivaldi => Box::new(VivaldiScanner),
+        Source::Chromium => Box::new(ChromiumScanner),
         Source::Npm => Box::new(NpmScanner),
         Source::Homebrew => Box::new(HomebrewScanner),
     }

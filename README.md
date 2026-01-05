@@ -9,7 +9,7 @@ A cross-platform CLI tool and library that scans locally installed extensions an
 
 ## Features
 
-- **Multi-source scanning**: VSCode extensions, Chrome/Edge/Firefox browser extensions, NPM global packages, Homebrew packages
+- **Multi-source scanning**: VSCode extensions, Chrome/Edge/Firefox/Brave/Arc/Opera/Vivaldi/Chromium browser extensions, NPM global packages, Homebrew packages
 - **Vulnerability checking**: Integrates with [OSV.dev](https://osv.dev) API to detect known security vulnerabilities
 - **Extension risk analysis**: CRXcavator-style permission and CSP risk scoring for browser extensions
 - **Outdated detection**: Identifies packages with newer versions available, classifies as MAJOR/minor/patch
@@ -67,6 +67,11 @@ extenscan scan
 extenscan scan --source npm
 extenscan scan --source vscode
 extenscan scan --source chrome
+extenscan scan --source brave
+extenscan scan --source arc        # macOS only
+extenscan scan --source opera
+extenscan scan --source vivaldi
+extenscan scan --source chromium
 extenscan scan --source firefox
 extenscan scan --source homebrew
 
@@ -281,6 +286,11 @@ extenscan/
 │   │   ├── chrome.rs    # Chrome extensions
 │   │   ├── edge.rs      # Edge extensions
 │   │   ├── firefox.rs   # Firefox add-ons
+│   │   ├── brave.rs     # Brave extensions
+│   │   ├── arc.rs       # Arc extensions (macOS)
+│   │   ├── opera.rs     # Opera extensions
+│   │   ├── vivaldi.rs   # Vivaldi extensions
+│   │   ├── chromium.rs  # Chromium extensions
 │   │   ├── npm.rs       # NPM global packages
 │   │   └── homebrew.rs  # Homebrew packages
 │   ├── checker/         # Security checkers
@@ -296,7 +306,7 @@ extenscan/
 ```
 ┌─────────────┐    ┌──────────┐    ┌─────────────┐    ┌────────┐
 │  Scanners   │───▶│ Packages │───▶│   Checkers  │───▶│ Output │
-│ (6 sources) │    │   List   │    │ (vuln/ver)  │    │ (table │
+│(11 sources) │    │   List   │    │ (vuln/ver)  │    │ (table │
 └─────────────┘    └──────────┘    └─────────────┘    │  /json)│
                                           │           └────────┘
                                           ▼
@@ -314,6 +324,11 @@ extenscan/
 | `chrome` | Google Chrome extensions | All | - | - |
 | `edge` | Microsoft Edge extensions | All | - | - |
 | `firefox` | Firefox add-ons | All | - | - |
+| `brave` | Brave browser extensions | All | - | - |
+| `arc` | Arc browser extensions | macOS | - | - |
+| `opera` | Opera browser extensions | All | - | - |
+| `vivaldi` | Vivaldi browser extensions | All | - | - |
+| `chromium` | Chromium browser extensions | All | - | - |
 | `npm` | NPM global packages | All | OSV.dev | npm registry |
 | `homebrew` | Homebrew packages/casks | Linux, macOS | OSV.dev | Homebrew API |
 

@@ -297,6 +297,102 @@ pub fn generate_html_string(result: &ScanResult) -> String {
 
     html.push_str("        </section>\n");
 
+    // Extension Risk section
+    let risky_extensions: Vec<_> = result
+        .packages
+        .iter()
+        .filter(|p| {
+            p.extension_risk
+                .as_ref()
+                .map(|r| r.total_score > 20)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if !risky_extensions.is_empty() {
+        html.push_str(r#"        <section>
+            <h2>Extension Risk Analysis</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Extension</th>
+                        <th>Risk Level</th>
+                        <th>Score</th>
+                        <th>High-Risk Permissions</th>
+                        <th>Issues</th>
+                    </tr>
+                </thead>
+                <tbody>
+"#);
+
+        let mut sorted_extensions = risky_extensions.clone();
+        sorted_extensions.sort_by(|a, b| {
+            let a_score = a.extension_risk.as_ref().map(|r| r.total_score).unwrap_or(0);
+            let b_score = b.extension_risk.as_ref().map(|r| r.total_score).unwrap_or(0);
+            b_score.cmp(&a_score)
+        });
+
+        for pkg in sorted_extensions {
+            if let Some(ref risk) = pkg.extension_risk {
+                let risk_class = match risk.total_score {
+                    s if s > 300 => "severity-critical",
+                    s if s > 100 => "severity-high",
+                    s if s > 20 => "severity-medium",
+                    _ => "",
+                };
+
+                let risk_label = match risk.total_score {
+                    s if s > 300 => "CRITICAL",
+                    s if s > 100 => "HIGH",
+                    s if s > 20 => "MEDIUM",
+                    _ => "LOW",
+                };
+
+                let high_risk_perms: Vec<_> = risk
+                    .permissions
+                    .iter()
+                    .filter(|p| {
+                        matches!(
+                            p.level,
+                            crate::checker::extension_risk::RiskLevel::Critical
+                                | crate::checker::extension_risk::RiskLevel::High
+                        )
+                    })
+                    .map(|p| html_escape(&p.name))
+                    .take(3)
+                    .collect();
+
+                let perms_display = if high_risk_perms.is_empty() {
+                    "-".to_string()
+                } else {
+                    high_risk_perms.join(", ")
+                };
+
+                html.push_str(&format!(
+                    r#"                    <tr>
+                        <td>{}</td>
+                        <td><span class="severity {}">{}</span></td>
+                        <td>{}</td>
+                        <td>{}</td>
+                        <td>{}</td>
+                    </tr>
+"#,
+                    html_escape(&pkg.name),
+                    risk_class,
+                    risk_label,
+                    risk.total_score,
+                    perms_display,
+                    risk.issues.len()
+                ));
+            }
+        }
+
+        html.push_str(r#"                </tbody>
+            </table>
+        </section>
+"#);
+    }
+
     // Packages section
     html.push_str(r#"        <section>
             <h2>All Packages</h2>

@@ -69,6 +69,10 @@ enum Commands {
         #[arg(long, value_enum)]
         fail_on: Option<FailLevel>,
 
+        /// Exit with error if extension risk at or above this level is found
+        #[arg(long, value_enum)]
+        fail_on_risk: Option<RiskThreshold>,
+
         /// Disable concurrent scanning (scan sources sequentially)
         #[arg(long)]
         no_parallel: bool,
@@ -125,6 +129,23 @@ enum FailLevel {
     Low,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum RiskThreshold {
+    /// Fail on critical risk (score > 300)
+    Critical,
+    /// Fail on high risk or above (score > 100)
+    High,
+    /// Fail on medium risk or above (score > 20)
+    Medium,
+}
+
+/// Exit codes for extension risk
+mod risk_exit_codes {
+    pub const CRITICAL_RISK: u8 = 10;
+    pub const HIGH_RISK: u8 = 11;
+    pub const MEDIUM_RISK: u8 = 12;
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
     match run().await {
@@ -149,6 +170,7 @@ async fn run() -> Result<u8> {
             output,
             clear_cache,
             fail_on,
+            fail_on_risk,
             no_parallel,
         } => {
             if clear_cache {
@@ -167,6 +189,7 @@ async fn run() -> Result<u8> {
                 check_outdated,
                 output,
                 fail_on,
+                fail_on_risk,
                 !no_parallel,
             )
             .await
@@ -208,6 +231,7 @@ async fn run_scan(
     check_outdated: bool,
     output_file: Option<String>,
     fail_on: Option<FailLevel>,
+    fail_on_risk: Option<RiskThreshold>,
     parallel: bool,
 ) -> Result<u8> {
     let format = OutputFormat::from_str(&format).map_err(|e| anyhow::anyhow!(e))?;
@@ -304,8 +328,12 @@ async fn run_scan(
         print_result(&result, format)?;
     }
 
-    // Determine exit code based on --fail-on
-    Ok(determine_exit_code(&result, fail_on))
+    // Determine exit code based on --fail-on and --fail-on-risk
+    let vuln_exit = determine_exit_code(&result, fail_on);
+    let risk_exit = determine_risk_exit_code(&result, fail_on_risk);
+
+    // Return the higher exit code (more severe)
+    Ok(vuln_exit.max(risk_exit))
 }
 
 /// Scan all sources concurrently using tokio tasks
@@ -472,6 +500,59 @@ fn determine_exit_code(result: &ScanResult, fail_on: Option<FailLevel>) -> u8 {
                 exit_codes::MEDIUM_VULN
             } else if has_low {
                 exit_codes::LOW_VULN
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+    }
+}
+
+/// Determine the exit code based on extension risk and --fail-on-risk setting
+fn determine_risk_exit_code(result: &ScanResult, fail_on_risk: Option<RiskThreshold>) -> u8 {
+    let threshold = match fail_on_risk {
+        Some(level) => level,
+        None => return exit_codes::SUCCESS,
+    };
+
+    // Find the highest risk score among all extensions
+    let max_risk_score = result
+        .packages
+        .iter()
+        .filter_map(|p| p.extension_risk.as_ref())
+        .map(|r| r.total_score)
+        .max()
+        .unwrap_or(0);
+
+    // Determine risk level from score
+    // Critical: > 300, High: > 100, Medium: > 20
+    let has_critical_risk = max_risk_score > 300;
+    let has_high_risk = max_risk_score > 100;
+    let has_medium_risk = max_risk_score > 20;
+
+    match threshold {
+        RiskThreshold::Critical => {
+            if has_critical_risk {
+                risk_exit_codes::CRITICAL_RISK
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+        RiskThreshold::High => {
+            if has_critical_risk {
+                risk_exit_codes::CRITICAL_RISK
+            } else if has_high_risk {
+                risk_exit_codes::HIGH_RISK
+            } else {
+                exit_codes::SUCCESS
+            }
+        }
+        RiskThreshold::Medium => {
+            if has_critical_risk {
+                risk_exit_codes::CRITICAL_RISK
+            } else if has_high_risk {
+                risk_exit_codes::HIGH_RISK
+            } else if has_medium_risk {
+                risk_exit_codes::MEDIUM_RISK
             } else {
                 exit_codes::SUCCESS
             }

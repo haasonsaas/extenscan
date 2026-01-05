@@ -1,3 +1,4 @@
+use crate::checker::extension_risk::analyze_extension;
 use crate::model::{Package, PackageMetadata, Platform, Source};
 use crate::platform::firefox_profiles_dir;
 use anyhow::Result;
@@ -18,6 +19,22 @@ struct FirefoxAddon {
     author: Option<AuthorField>,
     #[serde(alias = "homepageURL")]
     homepage_url: Option<String>,
+    // Permission fields from extensions.json
+    #[serde(default)]
+    permissions: Vec<String>,
+    #[serde(default, alias = "optionalPermissions")]
+    optional_permissions: Vec<String>,
+    // User permissions (granted by user)
+    #[serde(default, alias = "userPermissions")]
+    user_permissions: Option<UserPermissions>,
+}
+
+#[derive(Deserialize, Default)]
+struct UserPermissions {
+    #[serde(default)]
+    permissions: Vec<String>,
+    #[serde(default)]
+    origins: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -147,5 +164,34 @@ fn parse_firefox_addon(addon: FirefoxAddon) -> Option<Package> {
         license: None,
     };
 
-    Some(Package::new(id, name, version, Source::Firefox).with_metadata(metadata))
+    // Collect permissions for risk analysis
+    let mut all_permissions = addon.permissions.clone();
+    let mut host_permissions = Vec::new();
+
+    // Add user-granted permissions
+    if let Some(ref user_perms) = addon.user_permissions {
+        all_permissions.extend(user_perms.permissions.clone());
+        host_permissions.extend(user_perms.origins.clone());
+    }
+
+    // Separate API permissions from host permissions
+    let (api_perms, host_perms): (Vec<_>, Vec<_>) = all_permissions
+        .iter()
+        .partition(|p| !p.contains("://") && !p.starts_with("<"));
+
+    host_permissions.extend(host_perms.into_iter().cloned());
+
+    // Perform risk analysis
+    let risk_report = analyze_extension(
+        &api_perms.into_iter().cloned().collect::<Vec<_>>(),
+        &addon.optional_permissions,
+        &host_permissions,
+        None, // Firefox extensions.json doesn't include CSP
+    );
+
+    Some(
+        Package::new(id, name, version, Source::Firefox)
+            .with_metadata(metadata)
+            .with_extension_risk(risk_report),
+    )
 }

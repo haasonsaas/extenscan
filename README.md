@@ -11,11 +11,15 @@ A cross-platform CLI tool and library that scans locally installed extensions an
 
 - **Multi-source scanning**: VSCode extensions, Chrome/Edge/Firefox browser extensions, NPM global packages, Homebrew packages
 - **Vulnerability checking**: Integrates with [OSV.dev](https://osv.dev) API to detect known security vulnerabilities
-- **Outdated detection**: Identifies packages with newer versions available
+- **Extension risk analysis**: CRXcavator-style permission and CSP risk scoring for browser extensions
+- **Outdated detection**: Identifies packages with newer versions available, classifies as MAJOR/minor/patch
+- **Health scoring**: 0-100 health score based on vulnerabilities and outdated packages
 - **Cross-platform**: Works on Linux, macOS, and Windows
-- **Multiple output formats**: CLI tables or JSON for integration with other tools
+- **Multiple output formats**: CLI tables, JSON, SARIF, CycloneDX SBOM, HTML reports
+- **Watch mode**: Continuous monitoring with change detection
+- **CI/CD integration**: Exit codes based on severity (`--fail-on`)
 - **Caching**: 24-hour cache for API responses to improve performance
-- **Configurable**: TOML config file for customizing default behavior
+- **Configurable**: TOML config file with ignore lists and glob patterns
 - **Library support**: Use as a Rust library in your own projects
 
 ## Installation
@@ -103,6 +107,36 @@ extenscan scan --no-parallel
 extenscan scan --clear-cache
 ```
 
+### Package Lookup
+
+```bash
+# Get detailed info about a specific package
+extenscan info lodash
+extenscan info claude-code
+
+# Shows: version, metadata, vulnerabilities, updates, and risk analysis
+```
+
+### Watch Mode
+
+```bash
+# Continuous monitoring (rescan every 5 minutes)
+extenscan watch
+
+# Custom interval (in seconds)
+extenscan watch --interval 60
+
+# Watch specific source
+extenscan watch --source npm
+```
+
+### HTML Reports
+
+```bash
+# Generate HTML report
+extenscan scan --format html --output report.html
+```
+
 ### Other Commands
 
 ```bash
@@ -117,6 +151,40 @@ extenscan config --path    # Show config file path
 # Cache management
 extenscan clear-cache      # Clear all cached data
 ```
+
+## Extension Risk Analysis
+
+For browser extensions (Chrome, Edge, Firefox), extenscan performs CRXcavator-style security analysis:
+
+### Permission Risk Scoring
+
+Each permission is assigned a risk level:
+- **Critical**: `debugger`, `proxy` - Full browser/system access
+- **High**: `tabs`, `history`, `cookies`, `webRequest`, `downloads` - User data access
+- **Medium**: `activeTab`, `scripting`, `geolocation` - Limited access
+- **Low**: `storage`, `alarms`, `contextMenus` - Standard extension APIs
+
+### Content Security Policy (CSP) Analysis
+
+- Detects missing CSP
+- Flags `unsafe-eval` and `unsafe-inline`
+- Identifies remote script sources
+- Lists allowed external domains
+
+### Host Permission Scope
+
+- **AllUrls**: `<all_urls>` or `*://*/*` - Access to all websites
+- **Broad**: `*.example.com` - Wildcard domain access
+- **Specific**: `example.com` - Single domain access
+
+### Risk Score
+
+Aggregate score (0-1000+) based on:
+- Permission risk levels
+- CSP weaknesses
+- Host permission scope
+
+Higher scores indicate higher risk.
 
 ## Library Usage
 

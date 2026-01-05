@@ -177,3 +177,79 @@ pub fn print_sarif(result: &ScanResult) -> Result<()> {
 
     Ok(())
 }
+
+/// Generate SARIF as a string (for file output)
+pub fn generate_sarif_string(result: &ScanResult) -> Result<String> {
+    let mut rules = Vec::new();
+    let mut results = Vec::new();
+
+    for vuln in &result.vulnerabilities {
+        let package = result.packages.iter().find(|p| p.id == vuln.package_id);
+
+        let location_uri = package
+            .and_then(|p| p.install_path.as_ref())
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| vuln.package_id.clone());
+
+        let rule = SarifRule {
+            id: vuln.id.clone(),
+            name: vuln.title.clone(),
+            short_description: SarifMessage {
+                text: vuln.title.clone(),
+            },
+            full_description: vuln
+                .description
+                .as_ref()
+                .map(|d| SarifMessage { text: d.clone() }),
+            help_uri: vuln.reference_url.clone(),
+            default_configuration: SarifRuleConfiguration {
+                level: severity_to_sarif_level(vuln.severity),
+            },
+        };
+        rules.push(rule);
+
+        let sarif_result = SarifResult {
+            rule_id: vuln.id.clone(),
+            level: severity_to_sarif_level(vuln.severity),
+            message: SarifMessage {
+                text: format!(
+                    "{} vulnerability in {}: {}{}",
+                    vuln.severity.as_str(),
+                    vuln.package_id,
+                    vuln.title,
+                    vuln.fixed_version
+                        .as_ref()
+                        .map(|v| format!(" (fixed in {})", v))
+                        .unwrap_or_default()
+                ),
+            },
+            locations: vec![SarifLocation {
+                physical_location: SarifPhysicalLocation {
+                    artifact_location: SarifArtifactLocation {
+                        uri: location_uri,
+                        uri_base_id: None,
+                    },
+                },
+            }],
+        };
+        results.push(sarif_result);
+    }
+
+    let report = SarifReport {
+        schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+        version: "2.1.0",
+        runs: vec![SarifRun {
+            tool: SarifTool {
+                driver: SarifDriver {
+                    name: "extenscan",
+                    version: env!("CARGO_PKG_VERSION"),
+                    information_uri: "https://github.com/haasonsaas/extenscan",
+                    rules,
+                },
+            },
+            results,
+        }],
+    };
+
+    Ok(serde_json::to_string_pretty(&report)?)
+}

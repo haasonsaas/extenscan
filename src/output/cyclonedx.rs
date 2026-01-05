@@ -222,6 +222,103 @@ pub fn print_cyclonedx(result: &ScanResult) -> Result<()> {
     Ok(())
 }
 
+/// Generate CycloneDX as a string (for file output)
+pub fn generate_cyclonedx_string(result: &ScanResult) -> Result<String> {
+    let mut components = Vec::new();
+
+    for package in &result.packages {
+        let purl = format!(
+            "pkg:{}/{}@{}",
+            source_to_purl_type(&package.source),
+            package.id,
+            package.version
+        );
+
+        let mut external_refs = Vec::new();
+        if let Some(ref homepage) = package.metadata.homepage {
+            external_refs.push(CycloneDxExternalRef {
+                ref_type: "website",
+                url: homepage.clone(),
+            });
+        }
+        if let Some(ref repo) = package.metadata.repository {
+            external_refs.push(CycloneDxExternalRef {
+                ref_type: "vcs",
+                url: repo.clone(),
+            });
+        }
+
+        let licenses = package
+            .metadata
+            .license
+            .as_ref()
+            .map(|l| {
+                vec![CycloneDxLicense {
+                    license: CycloneDxLicenseId { id: l.clone() },
+                }]
+            })
+            .unwrap_or_default();
+
+        let component = CycloneDxComponent {
+            component_type: "library",
+            bom_ref: package.id.clone(),
+            name: package.name.clone(),
+            version: package.version.clone(),
+            purl: Some(purl),
+            description: package.metadata.description.clone(),
+            publisher: package.metadata.publisher.clone(),
+            licenses,
+            external_references: external_refs,
+        };
+
+        components.push(component);
+    }
+
+    let vulnerabilities: Vec<CycloneDxVulnerability> = result
+        .vulnerabilities
+        .iter()
+        .map(|vuln| {
+            let recommendation = vuln
+                .fixed_version
+                .as_ref()
+                .map(|v| format!("Upgrade to version {}", v));
+
+            CycloneDxVulnerability {
+                bom_ref: format!("vuln-{}", vuln.id),
+                id: vuln.id.clone(),
+                description: vuln.description.clone().or(Some(vuln.title.clone())),
+                recommendation,
+                ratings: vec![CycloneDxRating {
+                    severity: severity_to_cyclonedx(vuln.severity).to_string(),
+                    method: "other",
+                }],
+                affects: vec![CycloneDxAffects {
+                    component_ref: vuln.package_id.clone(),
+                }],
+            }
+        })
+        .collect();
+
+    let bom = CycloneDxBom {
+        bom_format: "CycloneDX",
+        spec_version: "1.5",
+        version: 1,
+        serial_number: format!("urn:uuid:{}", uuid_v4()),
+        metadata: CycloneDxMetadata {
+            timestamp: Utc::now().to_rfc3339(),
+            tools: vec![CycloneDxTool {
+                vendor: "extenscan",
+                name: "extenscan",
+                version: env!("CARGO_PKG_VERSION"),
+            }],
+        },
+        components,
+        vulnerabilities,
+    };
+
+    Ok(serde_json::to_string_pretty(&bom)?)
+}
+
 /// Generate a simple UUID v4 (random)
 fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};

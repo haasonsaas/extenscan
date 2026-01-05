@@ -1,5 +1,6 @@
 //! Package and source type definitions.
 
+use crate::checker::extension_risk::ExtensionRiskReport;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -177,6 +178,10 @@ pub struct Package {
     /// Additional metadata about the package.
     #[serde(flatten)]
     pub metadata: PackageMetadata,
+
+    /// Extension risk analysis (only for browser extensions).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extension_risk: Option<ExtensionRiskReport>,
 }
 
 impl Package {
@@ -209,6 +214,7 @@ impl Package {
             source,
             install_path: None,
             metadata: PackageMetadata::default(),
+            extension_risk: None,
         }
     }
 
@@ -225,6 +231,14 @@ impl Package {
     /// This is a builder-style method that returns `self` for chaining.
     pub fn with_metadata(mut self, metadata: PackageMetadata) -> Self {
         self.metadata = metadata;
+        self
+    }
+
+    /// Sets the extension risk analysis for this package.
+    ///
+    /// This is a builder-style method that returns `self` for chaining.
+    pub fn with_extension_risk(mut self, risk: ExtensionRiskReport) -> Self {
+        self.extension_risk = Some(risk);
         self
     }
 }

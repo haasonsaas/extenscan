@@ -5,7 +5,7 @@ use extenscan::{
     checker::{default_checker, default_version_checker, VulnerabilityChecker},
     config::Config,
     model::{ScanResult, Severity, Source},
-    output::{print_result, OutputFormat},
+    output::{format_result_to_string, print_result, OutputFormat},
     scanner::{all_scanners, get_scanner, Scanner},
 };
 use futures::future::join_all;
@@ -90,6 +90,31 @@ enum Commands {
 
     /// Clear the cache
     ClearCache,
+
+    /// Get detailed info about a specific package
+    Info {
+        /// Package name or ID to look up
+        package: String,
+    },
+
+    /// Watch mode - continuous monitoring with periodic rescans
+    Watch {
+        /// Filter by source (vscode, chrome, edge, firefox, npm, homebrew)
+        #[arg(short, long)]
+        source: Option<String>,
+
+        /// Interval between scans in seconds (default: 300 = 5 minutes)
+        #[arg(short, long, default_value = "300")]
+        interval: u64,
+
+        /// Skip vulnerability checking
+        #[arg(long)]
+        no_vuln_check: bool,
+
+        /// Skip outdated version checking
+        #[arg(long)]
+        no_outdated_check: bool,
+    },
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -158,6 +183,19 @@ async fn run() -> Result<u8> {
             let cache = Cache::new();
             cache.clear()?;
             println!("Cache cleared.");
+            Ok(exit_codes::SUCCESS)
+        }
+        Commands::Info { package } => {
+            show_package_info(&package).await?;
+            Ok(exit_codes::SUCCESS)
+        }
+        Commands::Watch {
+            source,
+            interval,
+            no_vuln_check,
+            no_outdated_check,
+        } => {
+            run_watch(source, interval, no_vuln_check, no_outdated_check).await?;
             Ok(exit_codes::SUCCESS)
         }
     }
@@ -258,11 +296,10 @@ async fn run_scan(
 
     // Handle output
     if let Some(path) = output_file {
-        let json = serde_json::to_string_pretty(&result)?;
-        std::fs::write(&path, json)?;
-        if is_interactive {
-            println!("Results written to: {}", path);
-        }
+        // Write output to file
+        let output = format_result_to_string(&result, format)?;
+        std::fs::write(&path, output)?;
+        println!("Results written to: {}", path);
     } else {
         print_result(&result, format)?;
     }
@@ -516,5 +553,264 @@ fn parse_source(s: &str) -> Result<Source> {
             "Unknown source: {}. Use: vscode, chrome, edge, firefox, npm, homebrew",
             s
         )),
+    }
+}
+
+async fn show_package_info(package_name: &str) -> Result<()> {
+    println!("Searching for package: {}", package_name);
+    println!();
+
+    // Scan all sources to find the package
+    let mut found = false;
+
+    for scanner in all_scanners() {
+        if !scanner.is_supported() {
+            continue;
+        }
+
+        if let Ok(packages) = scanner.scan().await {
+            for pkg in packages {
+                if pkg.id.to_lowercase().contains(&package_name.to_lowercase())
+                    || pkg.name.to_lowercase().contains(&package_name.to_lowercase())
+                {
+                    found = true;
+                    println!("Package: {}", pkg.name);
+                    println!("  ID:       {}", pkg.id);
+                    if pkg.version == "unknown" {
+                        println!("  Version:  (not detected)");
+                    } else {
+                        println!("  Version:  {}", pkg.version);
+                    }
+                    println!("  Source:   {}", pkg.source.display_name());
+
+                    if let Some(ref path) = pkg.install_path {
+                        println!("  Path:     {}", path.display());
+                    }
+
+                    if let Some(ref desc) = pkg.metadata.description {
+                        println!("  About:    {}", desc);
+                    }
+
+                    if let Some(ref publisher) = pkg.metadata.publisher {
+                        println!("  Author:   {}", publisher);
+                    }
+
+                    if let Some(ref license) = pkg.metadata.license {
+                        println!("  License:  {}", license);
+                    }
+
+                    if let Some(ref homepage) = pkg.metadata.homepage {
+                        println!("  Homepage: {}", homepage);
+                    }
+
+                    if let Some(ref repo) = pkg.metadata.repository {
+                        println!("  Repo:     {}", repo);
+                    }
+
+                    // Show extension risk analysis if available
+                    if let Some(ref risk) = pkg.extension_risk {
+                        println!();
+                        println!("  Security Risk Analysis:");
+                        println!("    Risk Level: {} (score: {})", risk.risk_level.to_uppercase(), risk.total_score);
+
+                        if !risk.permissions.is_empty() {
+                            let high_risk: Vec<_> = risk.permissions.iter()
+                                .filter(|p| matches!(p.level,
+                                    extenscan::checker::extension_risk::RiskLevel::Critical |
+                                    extenscan::checker::extension_risk::RiskLevel::High
+                                ))
+                                .collect();
+
+                            if !high_risk.is_empty() {
+                                println!("    High-risk permissions:");
+                                for perm in high_risk.iter().take(5) {
+                                    println!("      - {}: {}", perm.name, perm.description);
+                                }
+                                if high_risk.len() > 5 {
+                                    println!("      ... and {} more", high_risk.len() - 5);
+                                }
+                            }
+                        }
+
+                        if !risk.host_permissions.is_empty() {
+                            println!("    Host access: {:?}", risk.host_permission_scope);
+                        }
+
+                        if !risk.issues.is_empty() {
+                            println!("    Issues ({}):", risk.issues.len());
+                            for issue in risk.issues.iter().take(3) {
+                                println!("      - [{}] {}", issue.severity.as_str(), issue.title);
+                            }
+                        }
+                    }
+
+                    // Check for vulnerabilities
+                    let checker = default_checker();
+                    if let Ok(vulns) = checker.check(&[pkg.clone()]).await {
+                        if !vulns.is_empty() {
+                            println!();
+                            println!("  Vulnerabilities ({}):", vulns.len());
+                            for vuln in vulns {
+                                println!(
+                                    "    - [{}] {}: {}",
+                                    vuln.severity.as_str(),
+                                    vuln.id,
+                                    vuln.title
+                                );
+                            }
+                        }
+                    }
+
+                    // Check if outdated (skip for unknown versions)
+                    if pkg.version != "unknown" {
+                        let version_checker = default_version_checker();
+                        if let Ok(outdated) = version_checker.check_outdated(&[pkg.clone()]).await {
+                            if let Some(info) = outdated.first() {
+                                println!();
+                                println!(
+                                    "  Update available: {} -> {}",
+                                    info.current_version, info.latest_version
+                                );
+                            }
+                        }
+                    }
+
+                    println!();
+                }
+            }
+        }
+    }
+
+    if !found {
+        println!("No package found matching: {}", package_name);
+        println!();
+        println!("Try:");
+        println!("  extenscan scan              # List all packages");
+        println!("  extenscan info <name>       # Search by name");
+    }
+
+    Ok(())
+}
+
+async fn run_watch(
+    source_filter: Option<String>,
+    interval_secs: u64,
+    skip_vuln_check: bool,
+    skip_outdated_check: bool,
+) -> Result<()> {
+    use std::collections::HashSet;
+
+    let scanners: Vec<Box<dyn Scanner>> = if let Some(source_name) = source_filter {
+        let source = parse_source(&source_name)?;
+        vec![get_scanner(source)]
+    } else {
+        all_scanners()
+    };
+
+    println!("Starting watch mode (Ctrl+C to stop)");
+    println!("Scan interval: {} seconds", interval_secs);
+    println!();
+
+    let mut prev_packages: HashSet<String> = HashSet::new();
+    let mut prev_vulns: HashSet<String> = HashSet::new();
+    let mut first_run = true;
+
+    loop {
+        let scan_time = chrono::Utc::now();
+        println!(
+            "[{}] Scanning...",
+            scan_time.format("%Y-%m-%d %H:%M:%S UTC")
+        );
+
+        // Scan packages
+        let all_packages = scan_concurrent(&scanners, false).await;
+        let mut result = ScanResult::new(all_packages);
+
+        // Check vulnerabilities
+        if !skip_vuln_check && !result.packages.is_empty() {
+            let checker = default_checker();
+            if let Ok(vulns) = checker.check(&result.packages).await {
+                result.vulnerabilities = vulns;
+            }
+        }
+
+        // Check outdated
+        if !skip_outdated_check && !result.packages.is_empty() {
+            let version_checker = default_version_checker();
+            if let Ok(outdated) = version_checker.check_outdated(&result.packages).await {
+                result.outdated = outdated;
+            }
+        }
+
+        // Build current sets
+        let curr_packages: HashSet<String> = result
+            .packages
+            .iter()
+            .map(|p| format!("{}@{}", p.id, p.version))
+            .collect();
+
+        let curr_vulns: HashSet<String> = result
+            .vulnerabilities
+            .iter()
+            .map(|v| format!("{}/{}", v.package_id, v.id))
+            .collect();
+
+        if first_run {
+            // Initial summary
+            println!(
+                "  Found {} packages, {} vulnerabilities, {} outdated",
+                result.packages.len(),
+                result.vulnerabilities.len(),
+                result.outdated.len()
+            );
+            first_run = false;
+        } else {
+            // Report changes
+            let new_packages: Vec<_> = curr_packages.difference(&prev_packages).collect();
+            let removed_packages: Vec<_> = prev_packages.difference(&curr_packages).collect();
+            let new_vulns: Vec<_> = curr_vulns.difference(&prev_vulns).collect();
+            let resolved_vulns: Vec<_> = prev_vulns.difference(&curr_vulns).collect();
+
+            if new_packages.is_empty()
+                && removed_packages.is_empty()
+                && new_vulns.is_empty()
+                && resolved_vulns.is_empty()
+            {
+                println!("  No changes detected");
+            } else {
+                if !new_packages.is_empty() {
+                    println!("  [+] New packages: {}", new_packages.len());
+                    for pkg in &new_packages {
+                        println!("      + {}", pkg);
+                    }
+                }
+                if !removed_packages.is_empty() {
+                    println!("  [-] Removed packages: {}", removed_packages.len());
+                    for pkg in &removed_packages {
+                        println!("      - {}", pkg);
+                    }
+                }
+                if !new_vulns.is_empty() {
+                    println!("  [!] New vulnerabilities: {}", new_vulns.len());
+                    for vuln in &new_vulns {
+                        println!("      ! {}", vuln);
+                    }
+                }
+                if !resolved_vulns.is_empty() {
+                    println!("  [*] Resolved vulnerabilities: {}", resolved_vulns.len());
+                    for vuln in &resolved_vulns {
+                        println!("      * {}", vuln);
+                    }
+                }
+            }
+        }
+
+        prev_packages = curr_packages;
+        prev_vulns = curr_vulns;
+
+        println!("  Next scan in {} seconds...", interval_secs);
+        println!();
+
+        tokio::time::sleep(Duration::from_secs(interval_secs)).await;
     }
 }

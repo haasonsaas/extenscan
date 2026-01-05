@@ -1,8 +1,10 @@
+use crate::checker::extension_risk::analyze_extension;
 use crate::model::{Package, PackageMetadata, Platform, Source};
 use crate::platform::chrome_extensions_dir;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
+use serde_json::Value;
 use std::fs;
 
 pub struct ChromeScanner;
@@ -15,6 +17,15 @@ struct ChromeManifest {
     #[serde(default)]
     author: Option<String>,
     homepage_url: Option<String>,
+    // Security-relevant fields
+    #[serde(default)]
+    permissions: Vec<String>,
+    #[serde(default)]
+    optional_permissions: Vec<String>,
+    #[serde(default)]
+    host_permissions: Vec<String>,
+    // CSP can be a string or object depending on manifest version
+    content_security_policy: Option<Value>,
 }
 
 #[async_trait]
@@ -113,14 +124,56 @@ pub fn scan_chromium_extensions(
             license: None,
         };
 
+        // Extract CSP string (handles both MV2 string and MV3 object formats)
+        let csp_string = extract_csp(&manifest.content_security_policy);
+
+        // Combine permissions and host_permissions for analysis
+        // In MV2, host permissions are in the permissions array
+        // In MV3, they're in a separate host_permissions array
+        let (api_perms, host_perms): (Vec<_>, Vec<_>) = manifest
+            .permissions
+            .iter()
+            .partition(|p| !p.contains("://") && !p.starts_with("<"));
+
+        let all_host_perms: Vec<String> = host_perms
+            .into_iter()
+            .cloned()
+            .chain(manifest.host_permissions.clone())
+            .collect();
+
+        // Perform risk analysis
+        let risk_report = analyze_extension(
+            &api_perms.into_iter().cloned().collect::<Vec<_>>(),
+            &manifest.optional_permissions,
+            &all_host_perms,
+            csp_string.as_deref(),
+        );
+
         let package = Package::new(&extension_id, name, version, source)
             .with_path(version_path)
-            .with_metadata(metadata);
+            .with_metadata(metadata)
+            .with_extension_risk(risk_report);
 
         packages.push(package);
     }
 
     Ok(packages)
+}
+
+/// Extract CSP string from manifest value.
+/// MV2 uses a simple string, MV3 uses an object with extension_pages/sandbox keys.
+fn extract_csp(csp_value: &Option<Value>) -> Option<String> {
+    match csp_value {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Object(obj)) => {
+            // MV3 format - prefer extension_pages CSP
+            obj.get("extension_pages")
+                .or_else(|| obj.get("sandbox"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        }
+        _ => None,
+    }
 }
 
 fn get_localized_name(version_path: &std::path::Path, msg_key: &str) -> Option<String> {

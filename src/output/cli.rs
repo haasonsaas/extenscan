@@ -41,6 +41,20 @@ struct OutdatedRow {
     update_type: String,
 }
 
+#[derive(Tabled)]
+struct ExtensionRiskRow {
+    #[tabled(rename = "Extension")]
+    name: String,
+    #[tabled(rename = "Risk")]
+    risk_level: String,
+    #[tabled(rename = "Score")]
+    score: String,
+    #[tabled(rename = "Permissions")]
+    permissions: String,
+    #[tabled(rename = "Issues")]
+    issues: String,
+}
+
 pub fn print_cli_table(result: &ScanResult) -> Result<()> {
     println!();
     println!(
@@ -62,7 +76,7 @@ pub fn print_cli_table(result: &ScanResult) -> Result<()> {
             .map(|p| PackageRow {
                 source: p.source.display_name().to_string(),
                 name: truncate(&p.name, 40),
-                version: p.version.clone(),
+                version: format_version(&p.version),
                 id: truncate(&p.id, 50),
             })
             .collect();
@@ -128,11 +142,105 @@ pub fn print_cli_table(result: &ScanResult) -> Result<()> {
         print_upgrade_commands(result);
     }
 
+    // Extension Risk Analysis (for browser extensions)
+    print_extension_risks(result);
+
     // Summary
     println!();
     print_summary(result);
 
     Ok(())
+}
+
+fn print_extension_risks(result: &ScanResult) {
+    use crate::model::Source;
+
+    // Filter to browser extensions with risk data
+    let extensions_with_risk: Vec<_> = result
+        .packages
+        .iter()
+        .filter(|p| {
+            matches!(p.source, Source::Chrome | Source::Edge | Source::Firefox | Source::Vscode)
+                && p.extension_risk.is_some()
+        })
+        .collect();
+
+    if extensions_with_risk.is_empty() {
+        return;
+    }
+
+    // Only show if there are risky extensions (medium or higher)
+    let risky_extensions: Vec<_> = extensions_with_risk
+        .iter()
+        .filter(|p| {
+            p.extension_risk
+                .as_ref()
+                .map(|r| r.total_score > 20)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if risky_extensions.is_empty() {
+        return;
+    }
+
+    println!();
+    println!(
+        "Extension Risk Analysis ({} with elevated risk):",
+        risky_extensions.len()
+    );
+    println!();
+
+    let mut rows: Vec<ExtensionRiskRow> = risky_extensions
+        .iter()
+        .filter_map(|p| {
+            let risk = p.extension_risk.as_ref()?;
+            let high_risk_perms: Vec<_> = risk
+                .permissions
+                .iter()
+                .filter(|perm| {
+                    matches!(
+                        perm.level,
+                        crate::checker::extension_risk::RiskLevel::Critical
+                            | crate::checker::extension_risk::RiskLevel::High
+                    )
+                })
+                .map(|p| p.name.clone())
+                .collect();
+
+            Some(ExtensionRiskRow {
+                name: truncate(&p.name, 30),
+                risk_level: format_risk_level(&risk.risk_level),
+                score: risk.total_score.to_string(),
+                permissions: if high_risk_perms.is_empty() {
+                    "-".to_string()
+                } else {
+                    truncate(&high_risk_perms.join(", "), 35)
+                },
+                issues: risk.issues.len().to_string(),
+            })
+        })
+        .collect();
+
+    // Sort by score descending
+    rows.sort_by(|a, b| {
+        b.score
+            .parse::<u32>()
+            .unwrap_or(0)
+            .cmp(&a.score.parse::<u32>().unwrap_or(0))
+    });
+
+    let table = Table::new(rows).with(Style::rounded()).to_string();
+    println!("{}", table);
+}
+
+fn format_risk_level(level: &str) -> String {
+    match level {
+        "critical" => "\x1b[31mCRITICAL\x1b[0m".to_string(),
+        "high" => "\x1b[91mHIGH\x1b[0m".to_string(),
+        "medium" => "\x1b[33mMEDIUM\x1b[0m".to_string(),
+        _ => "LOW".to_string(),
+    }
 }
 
 fn format_severity(severity: &Severity) -> String {
@@ -153,6 +261,14 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+fn format_version(version: &str) -> String {
+    if version == "unknown" {
+        "-".to_string()
+    } else {
+        version.to_string()
+    }
+}
+
 /// Classify version update as major, minor, or patch
 fn classify_update(current: &str, latest: &str) -> String {
     let current_clean = current.trim_start_matches('v');
@@ -168,7 +284,7 @@ fn classify_update(current: &str, latest: &str) -> String {
 
         if let (Some(cm), Some(lm)) = (current_major, latest_major) {
             if lm > cm {
-                return "MAJOR ⚠".to_string();
+                return "MAJOR".to_string();
             }
         }
 
@@ -230,6 +346,62 @@ fn print_upgrade_commands(result: &ScanResult) {
     }
 }
 
+/// Calculate a health score (0-100) based on vulnerabilities and outdated packages
+fn calculate_health_score(result: &ScanResult) -> u8 {
+    if result.packages.is_empty() {
+        return 100;
+    }
+
+    let mut score: i32 = 100;
+
+    // Deduct for vulnerabilities
+    for vuln in &result.vulnerabilities {
+        match vuln.severity {
+            Severity::Critical => score -= 25,
+            Severity::High => score -= 15,
+            Severity::Medium => score -= 8,
+            Severity::Low => score -= 3,
+            Severity::Unknown => score -= 5,
+        }
+    }
+
+    // Deduct for outdated packages
+    for outdated in &result.outdated {
+        let is_major = {
+            let c = outdated.current_version.trim_start_matches('v');
+            let l = outdated.latest_version.trim_start_matches('v');
+            let cp: Vec<&str> = c.split('.').collect();
+            let lp: Vec<&str> = l.split('.').collect();
+            if let (Some(cm), Some(lm)) = (
+                cp.first().and_then(|s| s.parse::<u32>().ok()),
+                lp.first().and_then(|s| s.parse::<u32>().ok()),
+            ) {
+                lm > cm
+            } else {
+                false
+            }
+        };
+
+        if is_major {
+            score -= 5; // Major updates are more important
+        } else {
+            score -= 2; // Minor/patch updates
+        }
+    }
+
+    score.clamp(0, 100) as u8
+}
+
+fn health_score_indicator(score: u8) -> &'static str {
+    match score {
+        90..=100 => "[Excellent]",
+        70..=89 => "[Good]",
+        50..=69 => "[Fair]",
+        25..=49 => "[Poor]",
+        _ => "[Critical]",
+    }
+}
+
 fn print_summary(result: &ScanResult) {
     let critical = result
         .vulnerabilities
@@ -252,14 +424,26 @@ fn print_summary(result: &ScanResult) {
         .filter(|v| v.severity == Severity::Low)
         .count();
 
-    // Count packages by source
+    // Count packages by source and unknown versions
     let mut by_source: HashMap<Source, usize> = HashMap::new();
+    let mut unknown_count = 0;
     for pkg in &result.packages {
         *by_source.entry(pkg.source).or_default() += 1;
+        if pkg.version == "unknown" {
+            unknown_count += 1;
+        }
     }
 
     println!("Summary:");
-    println!("  Total packages: {}", result.packages.len());
+    if unknown_count > 0 {
+        println!(
+            "  Total packages: {} ({} with unknown version)",
+            result.packages.len(),
+            unknown_count
+        );
+    } else {
+        println!("  Total packages: {}", result.packages.len());
+    }
 
     // Show breakdown by source if multiple sources
     if by_source.len() > 1 {
@@ -308,4 +492,9 @@ fn print_summary(result: &ScanResult) {
             println!("  Outdated packages: {}", result.outdated.len());
         }
     }
+
+    // Health score
+    let score = calculate_health_score(result);
+    println!();
+    println!("Health Score: {}/100 {}", score, health_score_indicator(score));
 }

@@ -1,6 +1,8 @@
+pub mod extension_risk;
 mod osv;
 mod version;
 
+pub use extension_risk::{analyze_extension, ExtensionRiskReport, RiskLevel};
 pub use osv::{parse_cvss_score, OsvChecker};
 pub use version::{is_newer, VersionChecker};
 

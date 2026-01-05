@@ -178,15 +178,20 @@ pub fn generate_html_string(result: &ScanResult) -> String {
     ));
 
     // Vulnerabilities section
-    html.push_str(r#"        <section>
+    html.push_str(
+        r#"        <section>
             <h2>Vulnerabilities</h2>
-"#);
+"#,
+    );
 
     if result.vulnerabilities.is_empty() {
-        html.push_str(r#"            <div class="empty">No vulnerabilities found</div>
-"#);
+        html.push_str(
+            r#"            <div class="empty">No vulnerabilities found</div>
+"#,
+        );
     } else {
-        html.push_str(r#"            <table>
+        html.push_str(
+            r#"            <table>
                 <thead>
                     <tr>
                         <th>Severity</th>
@@ -197,7 +202,8 @@ pub fn generate_html_string(result: &ScanResult) -> String {
                     </tr>
                 </thead>
                 <tbody>
-"#);
+"#,
+        );
 
         let mut vulns = result.vulnerabilities.clone();
         vulns.sort_by_key(|v| match v.severity {
@@ -238,23 +244,30 @@ pub fn generate_html_string(result: &ScanResult) -> String {
             ));
         }
 
-        html.push_str(r#"                </tbody>
+        html.push_str(
+            r#"                </tbody>
             </table>
-"#);
+"#,
+        );
     }
 
     html.push_str("        </section>\n");
 
     // Outdated packages section
-    html.push_str(r#"        <section>
+    html.push_str(
+        r#"        <section>
             <h2>Outdated Packages</h2>
-"#);
+"#,
+    );
 
     if result.outdated.is_empty() {
-        html.push_str(r#"            <div class="empty">All packages are up to date</div>
-"#);
+        html.push_str(
+            r#"            <div class="empty">All packages are up to date</div>
+"#,
+        );
     } else {
-        html.push_str(r#"            <table>
+        html.push_str(
+            r#"            <table>
                 <thead>
                     <tr>
                         <th>Package</th>
@@ -264,7 +277,8 @@ pub fn generate_html_string(result: &ScanResult) -> String {
                     </tr>
                 </thead>
                 <tbody>
-"#);
+"#,
+        );
 
         for outdated in &result.outdated {
             let update_type = classify_update(&outdated.current_version, &outdated.latest_version);
@@ -290,9 +304,11 @@ pub fn generate_html_string(result: &ScanResult) -> String {
             ));
         }
 
-        html.push_str(r#"                </tbody>
+        html.push_str(
+            r#"                </tbody>
             </table>
-"#);
+"#,
+        );
     }
 
     html.push_str("        </section>\n");
@@ -310,7 +326,8 @@ pub fn generate_html_string(result: &ScanResult) -> String {
         .collect();
 
     if !risky_extensions.is_empty() {
-        html.push_str(r#"        <section>
+        html.push_str(
+            r#"        <section>
             <h2>Extension Risk Analysis</h2>
             <table>
                 <thead>
@@ -323,12 +340,21 @@ pub fn generate_html_string(result: &ScanResult) -> String {
                     </tr>
                 </thead>
                 <tbody>
-"#);
+"#,
+        );
 
         let mut sorted_extensions = risky_extensions.clone();
         sorted_extensions.sort_by(|a, b| {
-            let a_score = a.extension_risk.as_ref().map(|r| r.total_score).unwrap_or(0);
-            let b_score = b.extension_risk.as_ref().map(|r| r.total_score).unwrap_or(0);
+            let a_score = a
+                .extension_risk
+                .as_ref()
+                .map(|r| r.total_score)
+                .unwrap_or(0);
+            let b_score = b
+                .extension_risk
+                .as_ref()
+                .map(|r| r.total_score)
+                .unwrap_or(0);
             b_score.cmp(&a_score)
         });
 
@@ -387,22 +413,29 @@ pub fn generate_html_string(result: &ScanResult) -> String {
             }
         }
 
-        html.push_str(r#"                </tbody>
+        html.push_str(
+            r#"                </tbody>
             </table>
         </section>
-"#);
+"#,
+        );
     }
 
     // Packages section
-    html.push_str(r#"        <section>
+    html.push_str(
+        r#"        <section>
             <h2>All Packages</h2>
-"#);
+"#,
+    );
 
     if result.packages.is_empty() {
-        html.push_str(r#"            <div class="empty">No packages found</div>
-"#);
+        html.push_str(
+            r#"            <div class="empty">No packages found</div>
+"#,
+        );
     } else {
-        html.push_str(r#"            <table>
+        html.push_str(
+            r#"            <table>
                 <thead>
                     <tr>
                         <th>Source</th>
@@ -412,7 +445,8 @@ pub fn generate_html_string(result: &ScanResult) -> String {
                     </tr>
                 </thead>
                 <tbody>
-"#);
+"#,
+        );
 
         for pkg in &result.packages {
             html.push_str(&format!(
@@ -434,9 +468,11 @@ pub fn generate_html_string(result: &ScanResult) -> String {
             ));
         }
 
-        html.push_str(r#"                </tbody>
+        html.push_str(
+            r#"                </tbody>
             </table>
-"#);
+"#,
+        );
     }
 
     html.push_str("        </section>\n");
@@ -463,13 +499,15 @@ pub fn generate_html_string(result: &ScanResult) -> String {
     ));
 
     // Footer
-    html.push_str(r#"        <footer>
+    html.push_str(
+        r#"        <footer>
             Generated by extenscan
         </footer>
     </div>
 </body>
 </html>
-"#);
+"#,
+    );
 
     html
 }

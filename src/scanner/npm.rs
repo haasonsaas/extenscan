@@ -3,7 +3,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fmt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct NpmScanner;
@@ -33,21 +34,22 @@ struct PackageJson {
 #[serde(untagged)]
 enum AuthorField {
     String(String),
-    Object { name: Option<String>, email: Option<String> },
+    Object {
+        name: Option<String>,
+        email: Option<String>,
+    },
 }
 
-impl AuthorField {
-    fn to_string(&self) -> String {
+impl fmt::Display for AuthorField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthorField::String(s) => s.clone(),
-            AuthorField::Object { name, email } => {
-                match (name, email) {
-                    (Some(n), Some(e)) => format!("{} <{}>", n, e),
-                    (Some(n), None) => n.clone(),
-                    (None, Some(e)) => e.clone(),
-                    (None, None) => String::new(),
-                }
-            }
+            AuthorField::String(s) => write!(f, "{}", s),
+            AuthorField::Object { name, email } => match (name, email) {
+                (Some(n), Some(e)) => write!(f, "{} <{}>", n, e),
+                (Some(n), None) => write!(f, "{}", n),
+                (None, Some(e)) => write!(f, "{}", e),
+                (None, None) => Ok(()),
+            },
         }
     }
 }
@@ -122,15 +124,18 @@ impl super::Scanner for NpmScanner {
                 let version = pkg.version.unwrap_or_else(|| "unknown".to_string());
 
                 // Try to read package.json for more metadata
-                let pkg_metadata = prefix
-                    .as_ref()
-                    .and_then(|p| read_package_json(p, &name));
+                let pkg_metadata = prefix.as_ref().and_then(|p| read_package_json(p, &name));
 
                 let metadata = if let Some(pkg_json) = pkg_metadata {
                     PackageMetadata {
                         description: pkg_json.description,
-                        publisher: pkg_json.author.map(|a| a.to_string()).filter(|s| !s.is_empty()),
-                        homepage: pkg_json.homepage.or_else(|| Some(format!("https://www.npmjs.com/package/{}", name))),
+                        publisher: pkg_json
+                            .author
+                            .map(|a| a.to_string())
+                            .filter(|s| !s.is_empty()),
+                        homepage: pkg_json
+                            .homepage
+                            .or_else(|| Some(format!("https://www.npmjs.com/package/{}", name))),
                         repository: pkg_json.repository.and_then(|r| r.url()).or(pkg.resolved),
                         license: pkg_json.license,
                     }
@@ -174,7 +179,7 @@ fn get_npm_prefix(npm_cmd: &str) -> Option<PathBuf> {
     }
 }
 
-fn read_package_json(prefix: &PathBuf, package_name: &str) -> Option<PackageJson> {
+fn read_package_json(prefix: &Path, package_name: &str) -> Option<PackageJson> {
     let pkg_json_path = prefix
         .join("lib/node_modules")
         .join(package_name)

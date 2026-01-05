@@ -80,9 +80,9 @@ pub struct ExtensionRiskReport {
 pub enum HostPermissionScope {
     #[default]
     None,
-    Specific,      // Limited to specific domains
-    Broad,         // Uses wildcards like *.google.com
-    AllUrls,       // <all_urls> or *://*/*
+    Specific, // Limited to specific domains
+    Broad,    // Uses wildcards like *.google.com
+    AllUrls,  // <all_urls> or *://*/*
 }
 
 impl HostPermissionScope {
@@ -109,74 +109,244 @@ pub struct RiskIssue {
 pub fn get_permission_risk(permission: &str) -> PermissionRisk {
     // Critical risk - can access/modify everything
     let critical_permissions: HashMap<&str, (&str, &str)> = [
-        ("debugger", ("Access browser debugger", "Can read and modify all data on all websites")),
-        ("proxy", ("Control browser proxy settings", "Can intercept all network traffic")),
-        ("vpnProvider", ("VPN provider access", "Can route all network traffic")),
-        ("webAuthenticationProxy", ("Web authentication proxy", "Can intercept authentication flows")),
-    ].into_iter().collect();
+        (
+            "debugger",
+            (
+                "Access browser debugger",
+                "Can read and modify all data on all websites",
+            ),
+        ),
+        (
+            "proxy",
+            (
+                "Control browser proxy settings",
+                "Can intercept all network traffic",
+            ),
+        ),
+        (
+            "vpnProvider",
+            ("VPN provider access", "Can route all network traffic"),
+        ),
+        (
+            "webAuthenticationProxy",
+            (
+                "Web authentication proxy",
+                "Can intercept authentication flows",
+            ),
+        ),
+    ]
+    .into_iter()
+    .collect();
 
     // High risk - significant access to user data
     let high_permissions: HashMap<&str, (&str, &str)> = [
-        ("tabs", ("Read browser tabs", "Can see URLs and titles of all open tabs")),
-        ("webNavigation", ("Monitor navigation", "Can read your browsing history")),
-        ("history", ("Access browsing history", "Can read and modify browsing history")),
-        ("bookmarks", ("Access bookmarks", "Can read and modify your bookmarks")),
-        ("topSites", ("Access top sites", "Can see your most visited websites")),
-        ("sessions", ("Access session data", "Can access recently closed tabs and windows")),
-        ("cookies", ("Access cookies", "Can read and modify cookies for any website")),
-        ("webRequest", ("Intercept web requests", "Can observe and analyze traffic")),
-        ("webRequestBlocking", ("Block web requests", "Can block or modify network requests")),
-        ("declarativeNetRequest", ("Modify network requests", "Can redirect or modify requests")),
-        ("declarativeNetRequestWithHostAccess", ("Modify requests with host access", "Can modify requests to allowed hosts")),
-        ("pageCapture", ("Capture pages", "Can capture full page content as MHTML")),
-        ("tabCapture", ("Capture tabs", "Can capture video/audio from tabs")),
-        ("desktopCapture", ("Capture screen", "Can capture your entire screen")),
-        ("nativeMessaging", ("Native messaging", "Can communicate with programs on your computer")),
-        ("management", ("Manage extensions", "Can manage other installed extensions")),
-        ("privacy", ("Change privacy settings", "Can modify browser privacy settings")),
-        ("browsingData", ("Clear browsing data", "Can delete browsing history and data")),
-        ("contentSettings", ("Modify content settings", "Can change website permissions")),
-        ("downloads", ("Access downloads", "Can manage downloaded files")),
-        ("downloads.open", ("Open downloads", "Can open downloaded files")),
-        ("clipboardRead", ("Read clipboard", "Can read data you copy")),
-    ].into_iter().collect();
+        (
+            "tabs",
+            (
+                "Read browser tabs",
+                "Can see URLs and titles of all open tabs",
+            ),
+        ),
+        (
+            "webNavigation",
+            ("Monitor navigation", "Can read your browsing history"),
+        ),
+        (
+            "history",
+            (
+                "Access browsing history",
+                "Can read and modify browsing history",
+            ),
+        ),
+        (
+            "bookmarks",
+            ("Access bookmarks", "Can read and modify your bookmarks"),
+        ),
+        (
+            "topSites",
+            ("Access top sites", "Can see your most visited websites"),
+        ),
+        (
+            "sessions",
+            (
+                "Access session data",
+                "Can access recently closed tabs and windows",
+            ),
+        ),
+        (
+            "cookies",
+            (
+                "Access cookies",
+                "Can read and modify cookies for any website",
+            ),
+        ),
+        (
+            "webRequest",
+            ("Intercept web requests", "Can observe and analyze traffic"),
+        ),
+        (
+            "webRequestBlocking",
+            ("Block web requests", "Can block or modify network requests"),
+        ),
+        (
+            "declarativeNetRequest",
+            ("Modify network requests", "Can redirect or modify requests"),
+        ),
+        (
+            "declarativeNetRequestWithHostAccess",
+            (
+                "Modify requests with host access",
+                "Can modify requests to allowed hosts",
+            ),
+        ),
+        (
+            "pageCapture",
+            ("Capture pages", "Can capture full page content as MHTML"),
+        ),
+        (
+            "tabCapture",
+            ("Capture tabs", "Can capture video/audio from tabs"),
+        ),
+        (
+            "desktopCapture",
+            ("Capture screen", "Can capture your entire screen"),
+        ),
+        (
+            "nativeMessaging",
+            (
+                "Native messaging",
+                "Can communicate with programs on your computer",
+            ),
+        ),
+        (
+            "management",
+            ("Manage extensions", "Can manage other installed extensions"),
+        ),
+        (
+            "privacy",
+            (
+                "Change privacy settings",
+                "Can modify browser privacy settings",
+            ),
+        ),
+        (
+            "browsingData",
+            (
+                "Clear browsing data",
+                "Can delete browsing history and data",
+            ),
+        ),
+        (
+            "contentSettings",
+            ("Modify content settings", "Can change website permissions"),
+        ),
+        (
+            "downloads",
+            ("Access downloads", "Can manage downloaded files"),
+        ),
+        (
+            "downloads.open",
+            ("Open downloads", "Can open downloaded files"),
+        ),
+        (
+            "clipboardRead",
+            ("Read clipboard", "Can read data you copy"),
+        ),
+    ]
+    .into_iter()
+    .collect();
 
     // Medium risk - moderate access
     let medium_permissions: HashMap<&str, (&str, &str)> = [
-        ("activeTab", ("Access active tab", "Can access current tab when you click the extension")),
-        ("scripting", ("Inject scripts", "Can inject JavaScript into web pages")),
-        ("geolocation", ("Access location", "Can detect your physical location")),
-        ("notifications", ("Show notifications", "Can display desktop notifications")),
-        ("clipboardWrite", ("Write clipboard", "Can modify your clipboard")),
-        ("identity", ("Access identity", "Can access your browser identity")),
-        ("identity.email", ("Access email", "Can see your email address")),
+        (
+            "activeTab",
+            (
+                "Access active tab",
+                "Can access current tab when you click the extension",
+            ),
+        ),
+        (
+            "scripting",
+            ("Inject scripts", "Can inject JavaScript into web pages"),
+        ),
+        (
+            "geolocation",
+            ("Access location", "Can detect your physical location"),
+        ),
+        (
+            "notifications",
+            ("Show notifications", "Can display desktop notifications"),
+        ),
+        (
+            "clipboardWrite",
+            ("Write clipboard", "Can modify your clipboard"),
+        ),
+        (
+            "identity",
+            ("Access identity", "Can access your browser identity"),
+        ),
+        (
+            "identity.email",
+            ("Access email", "Can see your email address"),
+        ),
         ("tts", ("Text to speech", "Can use text-to-speech")),
-        ("ttsEngine", ("TTS engine", "Can provide text-to-speech engine")),
-        ("webRequestAuthProvider", ("Auth provider", "Can provide authentication")),
+        (
+            "ttsEngine",
+            ("TTS engine", "Can provide text-to-speech engine"),
+        ),
+        (
+            "webRequestAuthProvider",
+            ("Auth provider", "Can provide authentication"),
+        ),
         ("userScripts", ("User scripts", "Can execute user scripts")),
-        ("offscreen", ("Offscreen documents", "Can create offscreen documents")),
-    ].into_iter().collect();
+        (
+            "offscreen",
+            ("Offscreen documents", "Can create offscreen documents"),
+        ),
+    ]
+    .into_iter()
+    .collect();
 
     // Low risk - limited functionality
     let low_permissions: HashMap<&str, (&str, &str)> = [
-        ("storage", ("Store data", "Can store extension data locally")),
-        ("unlimitedStorage", ("Unlimited storage", "Can store large amounts of data")),
+        (
+            "storage",
+            ("Store data", "Can store extension data locally"),
+        ),
+        (
+            "unlimitedStorage",
+            ("Unlimited storage", "Can store large amounts of data"),
+        ),
         ("alarms", ("Set alarms", "Can schedule periodic tasks")),
-        ("contextMenus", ("Context menus", "Can add items to right-click menu")),
+        (
+            "contextMenus",
+            ("Context menus", "Can add items to right-click menu"),
+        ),
         ("idle", ("Detect idle", "Can detect when you're idle")),
         ("power", ("Power management", "Can affect power saving")),
         ("system.cpu", ("CPU info", "Can read CPU information")),
         ("system.memory", ("Memory info", "Can read memory usage")),
-        ("system.display", ("Display info", "Can read display information")),
-        ("system.storage", ("Storage info", "Can read storage information")),
-        ("fontSettings", ("Font settings", "Can modify font settings")),
+        (
+            "system.display",
+            ("Display info", "Can read display information"),
+        ),
+        (
+            "system.storage",
+            ("Storage info", "Can read storage information"),
+        ),
+        (
+            "fontSettings",
+            ("Font settings", "Can modify font settings"),
+        ),
         ("runtime", ("Runtime API", "Basic extension runtime access")),
         ("gcm", ("Cloud messaging", "Can receive push messages")),
         ("sidePanel", ("Side panel", "Can show side panel")),
         ("favicon", ("Favicon access", "Can access website favicons")),
         ("readingList", ("Reading list", "Can access reading list")),
         ("tabGroups", ("Tab groups", "Can organize tabs into groups")),
-    ].into_iter().collect();
+    ]
+    .into_iter()
+    .collect();
 
     if let Some((desc, warning)) = critical_permissions.get(permission) {
         return PermissionRisk {
@@ -236,7 +406,11 @@ pub fn analyze_host_permissions(hosts: &[String]) -> (HostPermissionScope, Vec<S
         let host = host.trim();
 
         // Check for all_urls or broad wildcards
-        if host == "<all_urls>" || host == "*://*/*" || host == "http://*/*" || host == "https://*/*" {
+        if host == "<all_urls>"
+            || host == "*://*/*"
+            || host == "http://*/*"
+            || host == "https://*/*"
+        {
             scope = HostPermissionScope::AllUrls;
         } else {
             // Extract the domain part to check for wildcards
@@ -249,10 +423,10 @@ pub fn analyze_host_permissions(hosts: &[String]) -> (HostPermissionScope, Vec<S
                 .unwrap_or("");
 
             // Check if domain contains wildcard (e.g., *.google.com)
-            if domain_part.starts_with("*.") || domain_part == "*" {
-                if scope != HostPermissionScope::AllUrls {
-                    scope = HostPermissionScope::Broad;
-                }
+            if (domain_part.starts_with("*.") || domain_part == "*")
+                && scope != HostPermissionScope::AllUrls
+            {
+                scope = HostPermissionScope::Broad;
             }
         }
 
@@ -293,7 +467,9 @@ pub fn analyze_csp(csp: Option<&str>) -> CspAnalysis {
     let csp = match csp {
         Some(c) if !c.is_empty() => c,
         _ => {
-            analysis.issues.push("No Content Security Policy defined".to_string());
+            analysis
+                .issues
+                .push("No Content Security Policy defined".to_string());
             analysis.score = 30;
             return analysis;
         }
@@ -321,12 +497,16 @@ pub fn analyze_csp(csp: Option<&str>) -> CspAnalysis {
                 for value in values {
                     if *value == "'unsafe-eval'" {
                         analysis.allows_unsafe_eval = true;
-                        analysis.issues.push("CSP allows unsafe-eval (enables eval())".to_string());
+                        analysis
+                            .issues
+                            .push("CSP allows unsafe-eval (enables eval())".to_string());
                         analysis.score += 40;
                     }
                     if *value == "'unsafe-inline'" {
                         analysis.allows_unsafe_inline = true;
-                        analysis.issues.push("CSP allows unsafe-inline scripts".to_string());
+                        analysis
+                            .issues
+                            .push("CSP allows unsafe-inline scripts".to_string());
                         analysis.score += 30;
                     }
                     // Check for remote script sources
@@ -340,7 +520,10 @@ pub fn analyze_csp(csp: Option<&str>) -> CspAnalysis {
             }
             "connect-src" => {
                 for value in values {
-                    if value.starts_with("http://") || value.starts_with("https://") || value.contains("*") {
+                    if value.starts_with("http://")
+                        || value.starts_with("https://")
+                        || value.contains("*")
+                    {
                         if let Some(domain) = extract_domain_from_pattern(value) {
                             if !analysis.allowed_domains.contains(&domain) {
                                 analysis.allowed_domains.push(domain);
@@ -412,7 +595,9 @@ pub fn analyze_extension(
         });
     }
 
-    let critical_count = report.permissions.iter()
+    let critical_count = report
+        .permissions
+        .iter()
         .filter(|p| p.level == RiskLevel::Critical)
         .count();
     if critical_count > 0 {
@@ -439,7 +624,8 @@ pub fn analyze_extension(
         21..=100 => "medium",
         101..=300 => "high",
         _ => "critical",
-    }.to_string();
+    }
+    .to_string();
 
     report
 }

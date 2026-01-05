@@ -160,8 +160,10 @@ fn print_extension_risks(result: &ScanResult) {
         .packages
         .iter()
         .filter(|p| {
-            matches!(p.source, Source::Chrome | Source::Edge | Source::Firefox | Source::Vscode)
-                && p.extension_risk.is_some()
+            matches!(
+                p.source,
+                Source::Chrome | Source::Edge | Source::Firefox | Source::Vscode
+            ) && p.extension_risk.is_some()
         })
         .collect();
 
@@ -501,9 +503,18 @@ fn print_summary(result: &ScanResult) {
         .collect();
 
     if !extensions_with_risk.is_empty() {
-        let critical_risk = extensions_with_risk.iter().filter(|r| r.total_score > 300).count();
-        let high_risk = extensions_with_risk.iter().filter(|r| r.total_score > 100 && r.total_score <= 300).count();
-        let medium_risk = extensions_with_risk.iter().filter(|r| r.total_score > 20 && r.total_score <= 100).count();
+        let critical_risk = extensions_with_risk
+            .iter()
+            .filter(|r| r.total_score > 300)
+            .count();
+        let high_risk = extensions_with_risk
+            .iter()
+            .filter(|r| r.total_score > 100 && r.total_score <= 300)
+            .count();
+        let medium_risk = extensions_with_risk
+            .iter()
+            .filter(|r| r.total_score > 20 && r.total_score <= 100)
+            .count();
 
         if critical_risk > 0 || high_risk > 0 || medium_risk > 0 {
             println!(
@@ -516,5 +527,9 @@ fn print_summary(result: &ScanResult) {
     // Health score
     let score = calculate_health_score(result);
     println!();
-    println!("Health Score: {}/100 {}", score, health_score_indicator(score));
+    println!(
+        "Health Score: {}/100 {}",
+        score,
+        health_score_indicator(score)
+    );
 }

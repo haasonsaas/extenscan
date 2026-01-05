@@ -109,6 +109,11 @@ fn source_to_purl_type(source: &Source) -> &'static str {
         Source::Chrome => "chrome",
         Source::Edge => "edge",
         Source::Firefox => "firefox",
+        Source::Brave => "brave",
+        Source::Arc => "arc",
+        Source::Opera => "opera",
+        Source::Vivaldi => "vivaldi",
+        Source::Chromium => "chromium",
     }
 }
 
